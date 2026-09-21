@@ -185,15 +185,57 @@ erDiagram
     model_versions ||--o{ drift_events : "monitored by"
     model_versions ||--o{ retrain_jobs : "triggers"
 
-    datasets { uuid id; varchar name; varchar s3_path; jsonb baseline_stats }
-    experiment_runs { uuid id; varchar model_type; jsonb metrics; enum status }
-    model_versions { uuid id; varchar version_tag; enum status; enum sla_tier }
-    predictions { uuid id; jsonb input; jsonb output; float latency_ms }
-    drift_events { uuid id; enum stage; float drift_score; timestamp onset_ts }
-    attribution_reports { uuid id; jsonb ranked_stages; float confidence }
-    retrain_jobs { uuid id; float cost_estimate; enum status; uuid approved_by }
-    audit_logs { uuid id; varchar action; varchar actor_email; jsonb metadata }
+    datasets {
+        uuid    id
+        varchar name
+        varchar s3_path
+        jsonb   baseline_stats
+    }
+    experiment_runs {
+        uuid    id
+        varchar model_type
+        jsonb   metrics
+        varchar status
+    }
+    model_versions {
+        uuid    id
+        varchar version_tag
+        varchar status
+        varchar sla_tier
+    }
+    predictions {
+        uuid      id
+        jsonb     input_snapshot
+        jsonb     output
+        float     latency_ms
+        timestamp predicted_at
+    }
+    drift_events {
+        uuid      id
+        varchar   stage
+        float     drift_score
+        varchar   detector_type
+        timestamp onset_timestamp
+    }
+    attribution_reports {
+        uuid  id
+        jsonb ranked_stages
+        float confidence
+    }
+    retrain_jobs {
+        uuid    id
+        float   cost_estimate
+        varchar status
+        uuid    approved_by
+    }
+    audit_logs {
+        uuid    id
+        varchar action
+        varchar actor_email
+        jsonb   metadata
+    }
 ```
+
 
 ---
 
