@@ -1,319 +1,303 @@
+<div align="center">
+
 # 🧠 MLOps Observability Platform
 
-> **An industry-grade MLOps platform** — Upload → Preprocess → Train → Deploy → Monitor with **stage-wise drift detection and root-cause attribution.**
+**An industry-grade MLOps platform with stage-wise drift detection and root-cause attribution.**
 
-[![Backend CI](https://github.com/Dinesh-kumar9/Drift_Detection/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Dinesh-kumar9/Drift_Detection/actions)
-[![Frontend CI](https://github.com/Dinesh-kumar9/Drift_Detection/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/Dinesh-kumar9/Drift_Detection/actions)
+[![Backend CI](https://github.com/Dinesh-kumar9/Drift_Detection/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Dinesh-kumar9/Drift_Detection/actions/workflows/backend-ci.yml)
+[![Frontend CI](https://github.com/Dinesh-kumar9/Drift_Detection/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/Dinesh-kumar9/Drift_Detection/actions/workflows/frontend-ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+
+</div>
 
 ---
 
-## 🚀 What Makes This Different
+## 🗺️ System Architecture
 
-Most MLOps tools only flag "drift detected" at the model output. This platform independently monitors **three pipeline stages** and uses a **temporal-magnitude attribution engine** to identify _which_ stage caused the drift.
+![MLOps Platform Architecture](docs/architecture.jpg)
 
-```
-Raw Data   ──► KS Test (scipy)  ──┐
-Preprocessed ► KS Test (scipy)  ──►  Attribution Engine  ──►  Ranked Root-Cause
-Predictions  ► ADWIN (river)   ──┘      + Slack Alert             Report
-```
+> **Core Differentiator:** Most MLOps tools only flag "drift detected" at the model output. This platform independently monitors **3 pipeline stages** and uses a temporal-magnitude engine to pinpoint *which* stage caused it.
 
-**Core differentiator:** The attribution score is:
 ```
 attribution_score(stage) = drift_magnitude × (1 / onset_lag_seconds)
+The stage that drifted hardest AND earliest → ranked #1 root cause
 ```
-The stage that drifted **hardest AND earliest** gets ranked #1 — the most likely root cause.
 
 ---
 
-## 📋 Feature Matrix
+## 🔄 How It Works — End to End
 
-| Capability | Details | Phase |
-|---|---|---|
-| Dataset ingestion | CSV upload, schema validation, baseline stats | Phase 1 |
-| Preprocessing pipeline | Missing value imputation, encoding, scaling — versioned | Phase 1 |
-| Multi-model training | 2–3 models in parallel per dataset (RF, XGB, LogReg) | Phase 1 |
-| Experiment tracking | Params, metrics, artifacts per run | Phase 1 |
-| Model registry | staging → production → archived lifecycle | Phase 1 |
-| Model serving | REST API with request/response logging | Phase 1 |
-| **Stage 1 drift monitor** | KS test on raw ingested feature distributions | **Phase 2** |
-| **Stage 2 drift monitor** | KS test on preprocessed feature distributions | **Phase 2** |
-| **Stage 3 drift monitor** | ADWIN on prediction error stream | **Phase 2** |
-| **Root-cause attribution** | Temporal-magnitude ranking across 3 stages | **Phase 2** |
-| **Slack alerting** | Ranked attribution report attached | **Phase 2** |
-| Retraining loop | Cost-benefit gated, human approval required | Phase 3 |
-| Audit trail | Full log of every action, promotion, and decision | Phase 3 |
-| Auth + RBAC | viewer / engineer / admin roles | Phase 4 |
-| SLA tiering | Critical / standard / low monitoring cadence | Phase 4 |
-| Multi-tenant dashboard | All models' health on one screen | Phase 4 |
+```mermaid
+flowchart TD
+    A([👤 User]) -->|Upload CSV| B[📥 Ingestion Service\nSchema validation + baseline stats]
+    B -->|Store| C[(☁️ MinIO / S3)]
+    B -->|Metadata| D[(🐘 Postgres)]
+
+    A -->|Trigger Training| E[🏋️ Training Service\nCelery async job]
+    E -->|2–3 models in parallel| F[RandomForest · XGBoost · LogReg]
+    F -->|Artifacts| C
+    F -->|Metrics| D
+
+    A -->|Compare + Deploy| G[📦 Model Registry\nstaging → production]
+
+    G -->|Serve predictions| H[🚀 Inference API\n p95 < 300ms]
+    H -->|Log every request| D
+
+    I[⏰ Celery Beat\nevery 5 min] --> J
+
+    subgraph OBS [⭐ Observability Engine]
+        J[S1 Ingestion\nKS Test] --> ATT
+        K[S2 Preprocessing\nKS Test] --> ATT
+        L[S3 Predictions\nADWIN] --> ATT
+        ATT[🧠 Attribution Engine\nscore = magnitude × 1÷onset_lag]
+        ATT -->|ranked report| M[🔔 Slack Alert]
+        ATT -->|drift confirmed| N[💰 Cost-Benefit Gate]
+        N -->|approved| O[✅ Human Approval Console]
+        O -->|approved| P[🚀 New Model Version]
+    end
+
+    H -.->|feed| J & K & L
+
+    style OBS fill:#0f2a1a,stroke:#06b6d4,stroke-width:2px,color:#fff
+    style ATT fill:#134e4a,stroke:#06b6d4,color:#fff
+    style M fill:#1e3a5f,stroke:#6366f1,color:#fff
+```
 
 ---
 
-## ⚡ Quick Start (Local Dev)
+## 📡 Observability Engine — Deep Dive
 
-**Requirements:** Docker Desktop (with Compose V2)
+```mermaid
+flowchart LR
+    subgraph INPUT["Live Production Data"]
+        D1[Raw Ingestion\nData Stream]
+        D2[Preprocessed\nFeatures]
+        D3[Model\nPredictions]
+    end
+
+    subgraph MONITORS["Independent Stage Monitors"]
+        M1["S1 Monitor\nscipy.stats.ks_2samp\n─────────────\ndrift_score · onset_ts"]
+        M2["S2 Monitor\nscipy.stats.ks_2samp\n─────────────\ndrift_score · onset_ts"]
+        M3["S3 Monitor\nriver.drift.ADWIN\n─────────────\ndrift_score · onset_ts"]
+    end
+
+    subgraph ATTRIBUTION["Attribution Engine"]
+        SCORE["score = magnitude × (1 / onset_lag)\n\nStage that drifted hardest & earliest\nranked as Root Cause #1"]
+    end
+
+    subgraph ACTION["Response Layer"]
+        REPORT[📊 Ranked Report\nstage · score · confidence]
+        SLACK[💬 Slack Alert\nattachment: full report]
+        GATE[💰 Cost-Benefit Gate\nROI check before retrain]
+        APPROVE[👤 Approval Console\nhuman gate]
+        DEPLOY[🚀 Deploy New Version\nfull audit trail]
+    end
+
+    D1 -->|batch KS| M1
+    D2 -->|batch KS| M2
+    D3 -->|streaming| M3
+    M1 & M2 & M3 --> SCORE
+    SCORE --> REPORT --> SLACK
+    SCORE --> GATE --> APPROVE --> DEPLOY
+```
+
+---
+
+## ⚡ Quick Start
+
+**Requirement:** Docker Desktop
 
 ```bash
-# Clone
 git clone https://github.com/Dinesh-kumar9/Drift_Detection.git
 cd Drift_Detection
 
-# Copy environment config (edit values if needed)
-cp backend/.env.example backend/.env
+cp backend/.env.example backend/.env   # configure secrets
 
-# Start all services
 docker-compose up --build
 ```
 
 | Service | URL | Credentials |
 |---|---|---|
 | **Frontend** | http://localhost:3000 | — |
-| **Backend API (Swagger)** | http://localhost:8000/docs | — |
+| **Backend Swagger** | http://localhost:8000/docs | — |
 | **MinIO Console** | http://localhost:9001 | minioadmin / minioadmin |
-| **Flower** (task queue monitor) | http://localhost:5555 | — |
-
-**Stop all services:**
-```bash
-docker-compose down
-```
-
-**Rebuild after code changes:**
-```bash
-docker-compose up --build --force-recreate
-```
+| **Flower** (task monitor) | http://localhost:5555 | — |
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Local Stack — All 8 Services
 
-Full architecture document with all diagrams: **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**
+```mermaid
+flowchart LR
+    subgraph LOCAL["docker-compose up"]
+        FE["🌐 Frontend\nVite :3000"]
+        API["⚡ FastAPI\n:8000"]
+        WK["⚙️ Celery Worker\ntraining·drift·retrain"]
+        BT["⏰ Celery Beat\nscheduler"]
+        FL["🌸 Flower\n:5555"]
+        PG[("🐘 Postgres\n:5432")]
+        RD[("⚡ Redis\n:6379")]
+        MN[("☁️ MinIO\n:9000/:9001")]
+    end
 
-### High-Level Components
-
+    FE -->|REST| API
+    API --> PG & RD & MN
+    API -->|enqueue| WK
+    WK --> PG & MN
+    BT -->|trigger| WK
+    WK --> FL
 ```
-┌─────────────────────────────────────────────────────────┐
-│              Frontend (React 18 + Vite + TS)            │
-│  Dataset Upload │ Experiments │ Models │ Observability  │
-└────────────────────────┬────────────────────────────────┘
-                         │ REST / JSON
-┌────────────────────────▼────────────────────────────────┐
-│             Backend API Layer (FastAPI)                  │
-│  Auth │ Ingestion │ Training │ Registry │ Serving │ Obs  │
-└────┬──────────┬──────────────────────────────────────────┘
-     │          │
-     ▼          ▼
-┌─────────┐  ┌──────────────────────────────┐
-│Postgres │  │ Async Workers (Celery)        │
-│Redis    │  │ training · drift · retrain    │
-│MinIO/S3 │  │ + Beat Scheduler (5min drift) │
-└─────────┘  └──────────────────────────────┘
-```
-
-### Observability Engine
-
-```
-S1 Ingestion ──► scipy KS Test   ──┐
-S2 Preprocessing► scipy KS Test  ──►  Attribution Engine  ──► Ranked Report
-S3 Predictions  ► river ADWIN    ──┘  score = magnitude ×      + Slack Alert
-                                       (1/onset_lag)
-```
-
-→ Full diagrams in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology | Why |
+| Layer | Technology | Purpose |
 |---|---|---|
 | **Frontend** | React 18 + Vite + TypeScript | Fast dev loop, type-safe API contracts |
-| **Styling** | Tailwind CSS v3 | Rapid, consistent dark-mode UI |
-| **Charts** | Recharts | React-native time-series drift charts |
-| **Server state** | TanStack Query | Caching, deduplication, no Redux |
-| **API** | FastAPI (Python 3.11) | Async, auto-generates OpenAPI docs |
-| **ORM** | SQLAlchemy async + Alembic | Migrations, type-safe queries |
-| **Task queue** | Celery + Redis | Non-blocking training & drift jobs |
-| **Scheduler** | Celery Beat → Airflow (Phase 2+) | 5-min scheduled drift checks |
-| **Drift (batch)** | `scipy.stats.ks_2samp` | Non-parametric, any distribution shape |
-| **Drift (stream)** | `river.drift.ADWIN` | Adaptive windowing for error streams |
-| **ML models** | scikit-learn + XGBoost | Classification + regression |
-| **Object storage** | MinIO (local) / AWS S3 (prod) | S3-compatible, zero cost for dev |
-| **Database** | PostgreSQL 16 (asyncpg) | Metadata, drift events, audit logs |
-| **Auth** | JWT → AWS Cognito (Phase 4) | Simple local auth, enterprise-ready swap |
-| **IaC** | Terraform (AWS) | VPC, RDS, S3, ECS Fargate, Cognito |
-| **CI/CD** | GitHub Actions | Lint → test → staging → approval → prod |
+| **Styling** | Tailwind CSS v3 | Dark-mode design system |
+| **Charts** | Recharts | Drift trend time-series |
+| **Server state** | TanStack Query | Caching, auto-refresh |
+| **API** | FastAPI (Python 3.11) | Async, auto OpenAPI docs |
+| **ORM** | SQLAlchemy async + Alembic | DB migrations |
+| **Task queue** | Celery + Redis | Non-blocking training/drift jobs |
+| **Drift batch** | `scipy.stats.ks_2samp` | Feature distribution comparison |
+| **Drift stream** | `river.drift.ADWIN` | Real-time prediction error monitoring |
+| **ML** | scikit-learn + XGBoost | Classification + regression |
+| **Storage** | MinIO (local) / AWS S3 (prod) | Datasets + model artifacts |
+| **Database** | PostgreSQL 16 | Metadata, drift events, audit |
+| **IaC** | Terraform (AWS) | VPC, RDS, S3, ECS, Cognito |
+| **CI/CD** | GitHub Actions | Lint → test → staging → prod |
 
 ---
 
-## 🗂️ Project Structure
+## 🗄️ Data Model (9 Tables)
 
-```
-Drift_Detection/
-│
-├── frontend/                        # React 18 + Vite + TypeScript
-│   ├── src/
-│   │   ├── api/client.ts            # Axios + JWT interceptor
-│   │   ├── components/Layout.tsx    # Sidebar + header shell
-│   │   ├── pages/
-│   │   │   ├── DatasetUpload.tsx         # Phase 1
-│   │   │   ├── ExperimentDashboard.tsx   # Phase 1
-│   │   │   ├── ModelComparison.tsx       # Phase 1
-│   │   │   ├── ObservabilityDashboard.tsx # Phase 2 ⭐
-│   │   │   └── RetrainApproval.tsx       # Phase 3
-│   │   ├── App.tsx                  # Router + QueryClient
-│   │   └── index.css                # Design system (Tailwind)
-│   ├── tailwind.config.js
-│   └── Dockerfile.dev
-│
-├── backend/
-│   ├── app/
-│   │   ├── api/                     # FastAPI routers (7 modules)
-│   │   ├── core/
-│   │   │   ├── config.py            # Pydantic settings
-│   │   │   ├── database.py          # Async SQLAlchemy engine
-│   │   │   └── security.py          # JWT + RBAC
-│   │   ├── models/__init__.py       # 9 ORM tables
-│   │   ├── services/
-│   │   │   └── drift/               # ⭐ Core differentiator
-│   │   │       ├── stage_monitors.py    # Phase 2
-│   │   │       ├── attribution_engine.py # Phase 2
-│   │   │       ├── alert_service.py     # Phase 2
-│   │   │       └── cost_benefit_gate.py # Phase 3
-│   │   └── workers/celery_app.py    # 3-queue Celery config
-│   ├── alembic/                     # DB migrations
-│   ├── tests/
-│   ├── Dockerfile                   # Multi-stage: api / worker / beat
-│   └── requirements.txt
-│
-├── infra/terraform/                 # AWS IaC (VPC, S3, RDS, ECS, Cognito)
-│
-├── .github/workflows/
-│   ├── backend-ci.yml               # Lint → test (60% cov) → ECR push
-│   ├── frontend-ci.yml              # Lint → typecheck → build
-│   └── deploy.yml                   # Staging → approval → production
-│
-├── docs/
-│   ├── ARCHITECTURE.md              # Full diagrams (6 Mermaid + ER)
-│   └── api-spec.yaml                # OpenAPI 3.1 (14 endpoints)
-│
-├── docker-compose.yml               # 8-service local dev stack
-└── README.md
+```mermaid
+erDiagram
+    datasets ||--o{ experiment_runs : "trains"
+    experiment_runs ||--o{ model_versions : "produces"
+    model_versions ||--o{ predictions : "generates"
+    model_versions ||--o{ drift_events : "monitored by"
+    model_versions ||--o{ retrain_jobs : "triggers"
+
+    datasets { uuid id; varchar name; varchar s3_path; jsonb baseline_stats }
+    experiment_runs { uuid id; varchar model_type; jsonb metrics; enum status }
+    model_versions { uuid id; varchar version_tag; enum status; enum sla_tier }
+    predictions { uuid id; jsonb input; jsonb output; float latency_ms }
+    drift_events { uuid id; enum stage; float drift_score; timestamp onset_ts }
+    attribution_reports { uuid id; jsonb ranked_stages; float confidence }
+    retrain_jobs { uuid id; float cost_estimate; enum status; uuid approved_by }
+    audit_logs { uuid id; varchar action; varchar actor_email; jsonb metadata }
 ```
 
 ---
 
-## 📡 API Reference
+## 🚦 CI/CD Pipeline
 
-Interactive docs (local): **http://localhost:8000/docs**  
-Full spec: [`docs/api-spec.yaml`](docs/api-spec.yaml)
+```mermaid
+flowchart LR
+    PUSH[📝 git push] --> SPLIT{Changed?}
+    SPLIT -->|backend/**| BCI[Backend CI\nblack·flake8·pytest\n≥60% coverage]
+    SPLIT -->|frontend/**| FCI[Frontend CI\neslint·tsc·vitest\nvite build]
+
+    BCI -->|main only| ECR[Push to ECR]
+    FCI -->|main only| S3F[Upload to S3]
+
+    ECR & S3F --> STG[🚀 Deploy Staging\nECS + CloudFront]
+    STG --> INT[Integration Tests\nvs. live staging]
+    INT -->|✅ pass| GATE[⏸ Manual Approval\nGitHub Environments]
+    INT -->|❌ fail| ROLL[🔙 Auto-Rollback\n+ Slack Alert]
+    GATE -->|👤 approved| PROD[🚀 Deploy Production]
+```
+
+---
+
+## 📋 Build Phases
+
+| Phase | Goal | Status |
+|---|---|---|
+| **Phase 0** — Foundation | Scaffold, Docker Compose, CI/CD, Architecture | ✅ **Complete** |
+| **Phase 1** — Core Lifecycle | Upload → Train → Compare → Deploy → Predict | 🔲 Planned |
+| **Phase 2** — Observability ⭐ | Stage drift detection + root-cause attribution | 🔲 Planned |
+| **Phase 3** — Retraining Loop | Cost-gated, human-approved closed-loop retrain | 🔲 Planned |
+| **Phase 4** — Hardening | Auth/RBAC, SLA tiers, multi-tenant dashboard | 🔲 Planned |
+
+> ⚠️ **Phase 2 is non-negotiable** — it is the core differentiator. Without it, this is just another MLOps CRUD app.
+
+---
+
+## 📡 API Surface
+
+Interactive docs: **http://localhost:8000/docs** | Spec: [`docs/api-spec.yaml`](docs/api-spec.yaml)
 
 ```
 POST   /auth/login                           Authenticate → JWT
-POST   /datasets                             Upload + validate CSV
-GET    /datasets/{id}                        Dataset metadata
-POST   /experiments/train                    Kick off multi-model training
+POST   /datasets                             Upload + schema-validate CSV
+POST   /experiments/train                    Kick off multi-model training (async)
 GET    /experiments/{id}/compare             Side-by-side metrics comparison
 POST   /models/{id}/deploy                   Promote to production
-POST   /models/{id}/predict                  Run inference (< 300ms p95)
-GET    /observability/{model_id}/drift       Stage-wise drift status   ⭐
-GET    /observability/{model_id}/attribution Root-cause attribution report ⭐
-POST   /retrain/{model_id}/trigger           Request retraining
+POST   /models/{id}/predict                  Inference (p95 < 300ms)
+GET    /observability/{id}/drift         ⭐  Stage-wise drift status
+GET    /observability/{id}/attribution   ⭐  Root-cause attribution report
+POST   /retrain/{id}/trigger                 Request retraining
 POST   /retrain/{job_id}/approve             Human approval gate
 GET    /audit-logs                           Filterable audit trail
-GET    /admin/models                         Multi-tenant health dashboard
 ```
 
 ---
 
-## 🗄️ Database Schema (9 Tables)
-
-| Table | Purpose |
-|---|---|
-| `users` | Auth, roles (viewer/engineer/admin) |
-| `datasets` | CSV metadata, S3 path, baseline stats |
-| `experiment_runs` | Training run params, metrics, artifact paths |
-| `model_versions` | Registry states (staging/production/archived) |
-| `predictions` | Every inference request logged |
-| `drift_events` | Per-stage drift scores + onset timestamps ⭐ |
-| `attribution_reports` | Ranked root-cause reports ⭐ |
-| `retrain_jobs` | Pending/approved/rejected retrain decisions |
-| `audit_logs` | Full immutable audit trail |
-
----
-
-## 🚦 Build Phases
-
-| Phase | Goal | Weeks | Status |
-|---|---|---|---|
-| **Phase 0** | Repo scaffold, Docker Compose, CI/CD, Architecture doc | 1 | ✅ **Complete** |
-| **Phase 1** | Upload → Preprocess → Train → Compare → Deploy → Predict | 2–5 | 🔲 Planned |
-| **Phase 2** | Stage-wise drift detection + root-cause attribution | 6–9 | 🔲 Planned |
-| **Phase 3** | Cost-gated, human-approved retraining loop | 10–12 | 🔲 Planned |
-| **Phase 4** | Auth/RBAC, SLA tiering, multi-tenant dashboard | 13–15 | 🔲 Planned |
-
-> **Phase 2 is the non-negotiable core differentiator** — without it this is just another MLOps CRUD app.
-
----
-
-## 🔀 Branch Strategy
+## 📁 Repository Structure
 
 ```
-main           ─── always deployable, protected (require CI + PR)
-feature/fr1-*  ─── one branch per functional requirement
-feature/fr8-stage-monitors   ← example: maps directly to FR8
-```
-
-Merge via squash to keep history readable as a portfolio repo.
-
----
-
-## 🧪 Running Tests
-
-```bash
-# Backend unit tests
-cd backend
-pip install -r requirements.txt
-pytest tests/unit/ --cov=app --cov-report=term-missing -v
-
-# Frontend type check + tests
-cd frontend
-npm ci
-npx tsc --noEmit
-npm run test
-```
-
-CI enforces **60% backend coverage** (raises to 75% in Phase 4).
-
----
-
-## ☁️ Production Deployment (AWS)
-
-The `infra/terraform/` directory contains skeleton Terraform for:
-- **VPC** — public/private subnets across 2 AZs
-- **S3** — versioned, encrypted buckets for datasets + models
-- **RDS** — Postgres 16 (multi-AZ in production, managed password rotation)
-- **ECS Fargate** — API + worker containers, no server management
-- **ECR** — image registry with lifecycle policy
-- **Cognito** — user pool with custom role attribute (Phase 4)
-
-```bash
-cd infra/terraform
-terraform init
-terraform plan -var="environment=staging"
-terraform apply -var="environment=staging"
+Drift_Detection/
+├── frontend/                   # React 18 + Vite + TypeScript
+│   ├── src/
+│   │   ├── api/client.ts       # Axios + JWT interceptor
+│   │   ├── components/
+│   │   │   └── Layout.tsx      # Sidebar + dark-mode shell
+│   │   └── pages/              # 5 pages (Phase 1–3)
+│   └── tailwind.config.js      # Brand design system
+│
+├── backend/
+│   ├── app/
+│   │   ├── core/               # Config · DB · Security
+│   │   ├── models/             # 9 SQLAlchemy ORM tables
+│   │   ├── api/                # 7 FastAPI routers
+│   │   ├── services/drift/  ⭐ # stage_monitors · attribution · alert
+│   │   └── workers/            # Celery (3 queues + Beat)
+│   ├── alembic/                # Async DB migrations
+│   └── Dockerfile              # Multi-stage: api / worker / beat
+│
+├── infra/terraform/            # AWS IaC (VPC·S3·RDS·ECS·Cognito)
+├── .github/workflows/          # backend-ci · frontend-ci · deploy
+├── docs/
+│   ├── architecture.jpg     ← this diagram
+│   ├── ARCHITECTURE.md         # Full Mermaid diagrams
+│   └── api-spec.yaml           # OpenAPI 3.1
+└── docker-compose.yml          # 8-service local stack
 ```
 
 ---
 
 ## 🤝 Contributing
 
-1. Branch: `git checkout -b feature/fr{N}-{description}`
-2. Make changes → `git push origin feature/fr{N}-{description}`
-3. Open PR against `main` — CI must pass before merge
-4. Squash-merge on approval
+```bash
+git checkout -b feature/fr{N}-description   # one branch per requirement
+# e.g. feature/fr8-stage-monitors  ← maps directly to FR8
+
+git push origin feature/fr8-stage-monitors
+# open PR → CI must pass → squash-merge
+```
 
 ---
 
-## 📄 License
+<div align="center">
 
-MIT © 2026 Dinesh Kumar
+MIT © 2026 Dinesh Kumar &nbsp;|&nbsp; [Architecture Docs](docs/ARCHITECTURE.md) &nbsp;|&nbsp; [API Spec](docs/api-spec.yaml)
+
+</div>
