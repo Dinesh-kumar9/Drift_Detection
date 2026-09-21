@@ -6,7 +6,6 @@ In production, unset S3_ENDPOINT_URL to use real AWS S3.
 
 import io
 import logging
-from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError

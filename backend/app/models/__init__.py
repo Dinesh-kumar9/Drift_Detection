@@ -201,6 +201,6 @@ class AuditLog(Base):
     action = Column(String(100), nullable=False)  # e.g. "model.deploy"
     target_type = Column(String(50), nullable=True)  # e.g. "model_version"
     target_id = Column(UUID(as_uuid=False), nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    extra_metadata = Column("metadata", JSONB, nullable=True)
     ip_address = Column(String(45), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)

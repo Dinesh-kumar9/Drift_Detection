@@ -3,7 +3,6 @@ Serving / Inference Service — Phase 1
 Loads the production model from MinIO, runs inference, logs every prediction.
 """
 
-import io
 import logging
 import pickle
 import time
@@ -16,7 +15,6 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.models import ExperimentRun, ModelVersion, Prediction
 from app.services import storage_service
 

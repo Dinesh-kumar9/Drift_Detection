@@ -16,13 +16,21 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - run: echo "Both CI workflows passed — proceeding to deploy"
+      - name: Validate CI and Credentials
+        run: |
+          echo "Both CI workflows passed."
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "AWS_ACCESS_KEY_ID secret is not configured. Deployment jobs will be skipped."
+          else
+            echo "AWS_ACCESS_KEY_ID secret found. Deployment will proceed."
+          fi
 
   # ─── Deploy to Staging ────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: check-ci
+    if: ${{ github.event.workflow_run.conclusion == 'success' && secrets.AWS_ACCESS_KEY_ID != '' }}
     environment: staging
 
     steps:

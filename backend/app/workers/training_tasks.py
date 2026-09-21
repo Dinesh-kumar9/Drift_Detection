@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 import pandas as pd
 from sqlalchemy import select, update
 
-from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models import Dataset, ExperimentRun, ModelVersion
 from app.services import preprocessing_service, storage_service, training_service
@@ -115,7 +114,7 @@ def run_training_job(
                     mv = ModelVersion(
                         id=str(uuid.uuid4()),
                         run_id=run.id,
-                        version_tag=f"v1.0.0",
+                        version_tag="v1.0.0",
                         status="staging",
                         sla_tier="standard",
                     )

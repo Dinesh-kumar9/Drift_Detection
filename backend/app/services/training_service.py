@@ -4,19 +4,17 @@ Trains RandomForest, XGBoost, and LogisticRegression/LinearRegression
 in parallel, logs metrics, saves artifacts to MinIO.
 """
 
-import io
 import logging
 import pickle
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
