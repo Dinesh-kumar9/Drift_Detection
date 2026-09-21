@@ -11,8 +11,11 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import Dataset, ExperimentRun
 from app.schemas.experiment import (
-    ComparisonResponse, ExperimentCreate, ExperimentListResponse,
-    ExperimentResponse, MetricSet,
+    ComparisonResponse,
+    ExperimentCreate,
+    ExperimentListResponse,
+    ExperimentResponse,
+    MetricSet,
 )
 from app.workers.training_tasks import run_training_job
 
@@ -40,6 +43,7 @@ async def trigger_training(
 
     # Determine models to train
     from app.services.training_service import CLASSIFICATION_MODELS, REGRESSION_MODELS
+
     if payload.task_type in ("classification", "auto"):
         model_names = list(CLASSIFICATION_MODELS.keys())
     else:
@@ -117,18 +121,20 @@ async def get_training_status(
         raise HTTPException(status_code=404, detail="Experiment group not found")
 
     statuses = [r.status for r in runs]
-    overall = "completed" if all(s == "completed" for s in statuses) \
-        else "failed" if any(s == "failed" for s in statuses) \
-        else "running" if any(s == "running" for s in statuses) \
-        else "queued"
+    overall = (
+        "completed"
+        if all(s == "completed" for s in statuses)
+        else (
+            "failed"
+            if any(s == "failed" for s in statuses)
+            else "running" if any(s == "running" for s in statuses) else "queued"
+        )
+    )
 
     return {
         "experiment_group_id": experiment_group_id,
         "overall_status": overall,
-        "models": [
-            {"model_type": r.model_type, "run_id": r.id, "status": r.status}
-            for r in runs
-        ],
+        "models": [{"model_type": r.model_type, "run_id": r.id, "status": r.status} for r in runs],
     }
 
 
@@ -161,21 +167,23 @@ async def compare_models(
     model_metrics = []
     for r in runs:
         m = r.metrics or {}
-        model_metrics.append(MetricSet(
-            model_type=r.model_type,
-            run_id=r.id,
-            accuracy=m.get("accuracy"),
-            f1=m.get("f1"),
-            precision=m.get("precision"),
-            recall=m.get("recall"),
-            roc_auc=m.get("roc_auc"),
-            mae=m.get("mae"),
-            rmse=m.get("rmse"),
-            r2=m.get("r2"),
-            latency_ms=m.get("latency_ms"),
-            training_time_s=m.get("training_time_s"),
-            status=r.status,
-        ))
+        model_metrics.append(
+            MetricSet(
+                model_type=r.model_type,
+                run_id=r.id,
+                accuracy=m.get("accuracy"),
+                f1=m.get("f1"),
+                precision=m.get("precision"),
+                recall=m.get("recall"),
+                roc_auc=m.get("roc_auc"),
+                mae=m.get("mae"),
+                rmse=m.get("rmse"),
+                r2=m.get("r2"),
+                latency_ms=m.get("latency_ms"),
+                training_time_s=m.get("training_time_s"),
+                status=r.status,
+            )
+        )
 
     # Pick best
     best = None

@@ -1,6 +1,18 @@
-"""Health check endpoint test."""
+"""Health check endpoint tests — no DB or external services required."""
 
 import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.main import app
+
+
+@pytest.fixture
+async def client():
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
 
 
 @pytest.mark.asyncio

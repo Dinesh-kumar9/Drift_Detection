@@ -53,12 +53,7 @@ async def list_datasets(
     count_result = await db.execute(select(func.count()).select_from(Dataset))
     total = count_result.scalar_one()
 
-    result = await db.execute(
-        select(Dataset)
-        .order_by(Dataset.uploaded_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+    result = await db.execute(select(Dataset).order_by(Dataset.uploaded_at.desc()).limit(limit).offset(offset))
     datasets = result.scalars().all()
     return DatasetListResponse(
         items=[DatasetResponse.model_validate(d) for d in datasets],

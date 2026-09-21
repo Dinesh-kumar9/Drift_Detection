@@ -9,11 +9,10 @@ Tables (matching PRD Section 7):
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import (
-    Column, String, Float, ForeignKey, DateTime,
-    Text, Enum as SAEnum, ARRAY,
-)
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import ARRAY, Column, DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Float, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -28,6 +27,7 @@ def _now() -> datetime:
 
 
 # ─── Users ───────────────────────────────────────────────────────────────────
+
 
 class User(Base):
     __tablename__ = "users"
@@ -46,15 +46,16 @@ class User(Base):
 
 # ─── Datasets ────────────────────────────────────────────────────────────────
 
+
 class Dataset(Base):
     __tablename__ = "datasets"
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     name = Column(String(255), nullable=False)
     s3_path = Column(String(512), nullable=False)
-    schema_json = Column(JSONB, nullable=True)          # inferred column types
+    schema_json = Column(JSONB, nullable=True)  # inferred column types
     row_count = Column(String(20), nullable=True)
-    baseline_stats = Column(JSONB, nullable=True)       # mean/std/quartiles per col
+    baseline_stats = Column(JSONB, nullable=True)  # mean/std/quartiles per col
     uploaded_at = Column(DateTime(timezone=True), default=_now)
     owner_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
 
@@ -64,16 +65,17 @@ class Dataset(Base):
 
 # ─── Experiment Runs ──────────────────────────────────────────────────────────
 
+
 class ExperimentRun(Base):
     __tablename__ = "experiment_runs"
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     dataset_id = Column(UUID(as_uuid=False), ForeignKey("datasets.id"), nullable=False)
-    model_type = Column(String(100), nullable=False)    # e.g. RandomForestClassifier
-    params = Column(JSONB, nullable=True)               # hyperparameters
-    metrics = Column(JSONB, nullable=True)              # accuracy, F1, latency, etc.
+    model_type = Column(String(100), nullable=False)  # e.g. RandomForestClassifier
+    params = Column(JSONB, nullable=True)  # hyperparameters
+    metrics = Column(JSONB, nullable=True)  # accuracy, F1, latency, etc.
     artifact_s3_path = Column(String(512), nullable=True)
-    preprocessing_config = Column(JSONB, nullable=True) # versioned preprocessing steps
+    preprocessing_config = Column(JSONB, nullable=True)  # versioned preprocessing steps
     git_commit = Column(String(40), nullable=True)
     status = Column(
         SAEnum("queued", "running", "completed", "failed", name="run_status"),
@@ -88,12 +90,13 @@ class ExperimentRun(Base):
 
 # ─── Model Versions ───────────────────────────────────────────────────────────
 
+
 class ModelVersion(Base):
     __tablename__ = "model_versions"
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     run_id = Column(UUID(as_uuid=False), ForeignKey("experiment_runs.id"), nullable=False)
-    version_tag = Column(String(50), nullable=True)     # e.g. "v1.2.0"
+    version_tag = Column(String(50), nullable=True)  # e.g. "v1.2.0"
     status = Column(
         SAEnum("staging", "production", "archived", name="model_status"),
         default="staging",
@@ -113,6 +116,7 @@ class ModelVersion(Base):
 
 # ─── Predictions ─────────────────────────────────────────────────────────────
 
+
 class Prediction(Base):
     __tablename__ = "predictions"
 
@@ -128,6 +132,7 @@ class Prediction(Base):
 
 # ─── Drift Events ─────────────────────────────────────────────────────────────
 
+
 class DriftEvent(Base):
     __tablename__ = "drift_events"
 
@@ -137,9 +142,9 @@ class DriftEvent(Base):
         SAEnum("S1_ingestion", "S2_preprocessing", "S3_output", name="drift_stage"),
         nullable=False,
     )
-    drift_score = Column(Float, nullable=False)         # 0.0 – 1.0 normalized
-    detector_type = Column(String(50), nullable=True)   # ks_test | adwin
-    feature_name = Column(String(100), nullable=True)   # which feature drifted
+    drift_score = Column(Float, nullable=False)  # 0.0 – 1.0 normalized
+    detector_type = Column(String(50), nullable=True)  # ks_test | adwin
+    feature_name = Column(String(100), nullable=True)  # which feature drifted
     threshold_used = Column(Float, nullable=True)
     onset_timestamp = Column(DateTime(timezone=True), nullable=True)
     detected_at = Column(DateTime(timezone=True), default=_now)
@@ -149,12 +154,13 @@ class DriftEvent(Base):
 
 # ─── Attribution Reports ──────────────────────────────────────────────────────
 
+
 class AttributionReport(Base):
     __tablename__ = "attribution_reports"
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     drift_event_ids = Column(ARRAY(Text), nullable=False)
-    ranked_stages = Column(JSONB, nullable=False)   # [{stage, score, confidence}, ...]
+    ranked_stages = Column(JSONB, nullable=False)  # [{stage, score, confidence}, ...]
     root_cause_stage = Column(String(50), nullable=True)
     confidence = Column(Float, nullable=True)
     generated_at = Column(DateTime(timezone=True), default=_now)
@@ -162,18 +168,18 @@ class AttributionReport(Base):
 
 # ─── Retrain Jobs ────────────────────────────────────────────────────────────
 
+
 class RetrainJob(Base):
     __tablename__ = "retrain_jobs"
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     model_version_id = Column(UUID(as_uuid=False), ForeignKey("model_versions.id"), nullable=False)
-    trigger_reason = Column(JSONB, nullable=True)       # what caused retrain
-    cost_estimate = Column(Float, nullable=True)        # estimated $ compute cost
-    expected_gain = Column(Float, nullable=True)        # expected accuracy delta
+    trigger_reason = Column(JSONB, nullable=True)  # what caused retrain
+    cost_estimate = Column(Float, nullable=True)  # estimated $ compute cost
+    expected_gain = Column(Float, nullable=True)  # expected accuracy delta
     approved_by = Column(UUID(as_uuid=False), nullable=True)
     status = Column(
-        SAEnum("pending", "approved", "rejected", "running", "completed", "failed",
-               name="retrain_status"),
+        SAEnum("pending", "approved", "rejected", "running", "completed", "failed", name="retrain_status"),
         default="pending",
     )
     rejection_reason = Column(Text, nullable=True)
@@ -185,14 +191,15 @@ class RetrainJob(Base):
 
 # ─── Audit Logs ──────────────────────────────────────────────────────────────
 
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     actor_id = Column(UUID(as_uuid=False), nullable=True)
     actor_email = Column(String(255), nullable=True)
-    action = Column(String(100), nullable=False)        # e.g. "model.deploy"
-    target_type = Column(String(50), nullable=True)     # e.g. "model_version"
+    action = Column(String(100), nullable=False)  # e.g. "model.deploy"
+    target_type = Column(String(50), nullable=True)  # e.g. "model_version"
     target_id = Column(UUID(as_uuid=False), nullable=True)
     metadata = Column(JSONB, nullable=True)
     ip_address = Column(String(45), nullable=True)

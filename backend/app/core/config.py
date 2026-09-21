@@ -3,9 +3,10 @@ Central configuration using Pydantic BaseSettings.
 All values are read from environment variables / .env file.
 """
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
 
     # ─── Object Storage (MinIO / S3) ──────────────────────────────────────────
-    S3_ENDPOINT_URL: Optional[str] = "http://localhost:9000"   # None = use real AWS S3
+    S3_ENDPOINT_URL: Optional[str] = "http://localhost:9000"  # None = use real AWS S3
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET_DATASETS: str = "mlops-datasets"
@@ -43,12 +44,12 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
 
     # ─── Drift Detection ──────────────────────────────────────────────────────
-    DRIFT_KS_P_VALUE_THRESHOLD: float = 0.05   # KS test significance level
-    DRIFT_ADWIN_DELTA: float = 0.002           # ADWIN sensitivity
-    DRIFT_CHECK_INTERVAL_SECONDS: int = 300    # Celery Beat default (5 min)
+    DRIFT_KS_P_VALUE_THRESHOLD: float = 0.05  # KS test significance level
+    DRIFT_ADWIN_DELTA: float = 0.002  # ADWIN sensitivity
+    DRIFT_CHECK_INTERVAL_SECONDS: int = 300  # Celery Beat default (5 min)
 
     # ─── Alerting ─────────────────────────────────────────────────────────────
-    SLACK_WEBHOOK_URL: Optional[str] = None   # Set to enable Slack alerts
+    SLACK_WEBHOOK_URL: Optional[str] = None  # Set to enable Slack alerts
     ALERT_EMAIL_FROM: Optional[str] = None
     ALERT_EMAIL_TO: Optional[str] = None
 

@@ -9,34 +9,33 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+# ─── Router imports (stubs in Phase 0 — fully implemented in Phase 1+) ────────
+from app.api import audit, auth, datasets, experiments, models, observability, retrain
 from app.core.config import settings
 from app.core.database import init_db
 
-# ─── Router imports (stubs in Phase 0 — fully implemented in Phase 1+) ────────
-from app.api import auth, datasets, experiments, models, observability, retrain, audit
-
-
 # ─── Lifespan ────────────────────────────────────────────────────────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Run startup tasks before serving, teardown after shutdown."""
     # Startup
     if settings.ENVIRONMENT == "local":
-        await init_db()     # auto-create tables in local dev
+        await init_db()  # auto-create tables in local dev
     yield
     # Shutdown (cleanup if needed)
 
 
 # ─── App Factory ─────────────────────────────────────────────────────────────
 
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
         description=(
-            "Multi-Model MLOps Observability Platform — "
-            "stage-wise drift detection with root-cause attribution."
+            "Multi-Model MLOps Observability Platform — " "stage-wise drift detection with root-cause attribution."
         ),
         docs_url="/docs",
         redoc_url="/redoc",

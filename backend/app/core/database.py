@@ -2,12 +2,12 @@
 SQLAlchemy async engine, session factory, and base model declaration.
 """
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
 from typing import AsyncGenerator
 
-from app.core.config import settings
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
+from app.core.config import settings
 
 # ─── Engine ──────────────────────────────────────────────────────────────────
 
@@ -30,12 +30,15 @@ AsyncSessionLocal = async_sessionmaker(
 
 # ─── Base Model ──────────────────────────────────────────────────────────────
 
+
 class Base(DeclarativeBase):
     """All ORM models inherit from this base."""
+
     pass
 
 
 # ─── Dependency ──────────────────────────────────────────────────────────────
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency that yields a DB session per request."""
@@ -54,4 +57,5 @@ async def init_db() -> None:
     """Create all tables on startup (dev only — use Alembic for migrations in prod)."""
     async with engine.begin() as conn:
         from app.models import Base as ModelsBase  # noqa: F401 — triggers registration
+
         await conn.run_sync(ModelsBase.metadata.create_all)

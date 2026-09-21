@@ -9,16 +9,14 @@ from datetime import datetime, timezone
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ModelVersion, ExperimentRun
+from app.models import ExperimentRun, ModelVersion
 
 logger = logging.getLogger(__name__)
 
 
 async def get_production_model(db: AsyncSession) -> ModelVersion | None:
     """Return the currently active production model version."""
-    result = await db.execute(
-        select(ModelVersion).where(ModelVersion.status == "production")
-    )
+    result = await db.execute(select(ModelVersion).where(ModelVersion.status == "production"))
     return result.scalars().first()
 
 
@@ -51,9 +49,7 @@ async def promote_to_production(
     )
     await db.flush()
 
-    result = await db.execute(
-        select(ModelVersion).where(ModelVersion.id == model_version_id)
-    )
+    result = await db.execute(select(ModelVersion).where(ModelVersion.id == model_version_id))
     model = result.scalars().first()
     logger.info("Model %s promoted to production (sla_tier=%s)", model_version_id, sla_tier)
     return model
@@ -64,15 +60,11 @@ async def get_model_with_run(
     model_version_id: str,
 ) -> tuple[ModelVersion | None, ExperimentRun | None]:
     """Fetch model version + its experiment run in one query."""
-    mv_result = await db.execute(
-        select(ModelVersion).where(ModelVersion.id == model_version_id)
-    )
+    mv_result = await db.execute(select(ModelVersion).where(ModelVersion.id == model_version_id))
     mv = mv_result.scalars().first()
     if not mv:
         return None, None
 
-    run_result = await db.execute(
-        select(ExperimentRun).where(ExperimentRun.id == mv.run_id)
-    )
+    run_result = await db.execute(select(ExperimentRun).where(ExperimentRun.id == mv.run_id))
     run = run_result.scalars().first()
     return mv, run

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ─── Schema inference ────────────────────────────────────────────────────────
 
+
 def _infer_schema(df: pd.DataFrame) -> dict:
     """Return per-column type and null info."""
     schema = {}
@@ -41,13 +42,13 @@ def _compute_baseline_stats(df: pd.DataFrame) -> dict:
     for col in df.select_dtypes(include=["number"]).columns:
         s = df[col].dropna()
         stats[col] = {
-            "mean":  float(s.mean()),
-            "std":   float(s.std()),
-            "min":   float(s.min()),
-            "max":   float(s.max()),
-            "p25":   float(s.quantile(0.25)),
-            "p50":   float(s.quantile(0.50)),
-            "p75":   float(s.quantile(0.75)),
+            "mean": float(s.mean()),
+            "std": float(s.std()),
+            "min": float(s.min()),
+            "max": float(s.max()),
+            "p25": float(s.quantile(0.25)),
+            "p50": float(s.quantile(0.50)),
+            "p75": float(s.quantile(0.75)),
             "values_sample": s.sample(min(200, len(s)), random_state=42).tolist(),
         }
     for col in df.select_dtypes(include=["object", "category"]).columns:
@@ -73,6 +74,7 @@ def _validate_csv(df: pd.DataFrame) -> list[str]:
 
 
 # ─── Main service function ────────────────────────────────────────────────────
+
 
 async def ingest_dataset(
     db: AsyncSession,

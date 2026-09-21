@@ -13,12 +13,11 @@ from datetime import datetime, timezone
 import pandas as pd
 from sqlalchemy import select, update
 
-from app.workers.celery_app import celery_app
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models import Dataset, ExperimentRun, ModelVersion
-from app.services import storage_service
-from app.services import preprocessing_service, training_service
+from app.services import preprocessing_service, storage_service, training_service
+from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +65,7 @@ def run_training_job(
 
             # Update all runs in this group to "running"
             await db.execute(
-                update(ExperimentRun)
-                .where(ExperimentRun.id == experiment_group_id)
-                .values(status="running")
+                update(ExperimentRun).where(ExperimentRun.id == experiment_group_id).values(status="running")
             )
             await db.commit()
 
@@ -79,20 +76,21 @@ def run_training_job(
             logger.info("Loaded dataset: %d rows × %d cols", len(df), len(df.columns))
 
             # ── 2. Preprocess ───────────────────────────────────────────────
-            X, y, config, transformer_obj = preprocessing_service.build_preprocessing_pipeline(
-                df, target_column
-            )
+            X, y, config, transformer_obj = preprocessing_service.build_preprocessing_pipeline(df, target_column)
             actual_task_type = config["task_type"] if task_type == "auto" else task_type
 
             # Save preprocessed data to MinIO
-            preprocessing_service.save_preprocessed(
-                X, y, config, transformer_obj, dataset_id, experiment_group_id
-            )
+            preprocessing_service.save_preprocessed(X, y, config, transformer_obj, dataset_id, experiment_group_id)
 
             # ── 3. Train all models ─────────────────────────────────────────
             results = training_service.train_all_models(
-                X, y, actual_task_type, dataset_id, experiment_group_id,
-                test_size=test_size, random_state=random_state,
+                X,
+                y,
+                actual_task_type,
+                dataset_id,
+                experiment_group_id,
+                test_size=test_size,
+                random_state=random_state,
             )
 
             # ── 4. Persist to DB ────────────────────────────────────────────
@@ -100,8 +98,7 @@ def run_training_job(
             for res in results:
                 # Find or create the ExperimentRun for this model
                 run_result = await db.execute(
-                    select(ExperimentRun)
-                    .where(
+                    select(ExperimentRun).where(
                         ExperimentRun.dataset_id == dataset_id,
                         ExperimentRun.model_type == res["model_name"],
                         ExperimentRun.params.op("->>")(("group_id",)) == experiment_group_id,

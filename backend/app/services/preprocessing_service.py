@@ -12,10 +12,10 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 from app.core.config import settings
 from app.services import storage_service
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Feature detection ────────────────────────────────────────────────────────
+
 
 def _detect_columns(df: pd.DataFrame, target_col: str):
     """Split columns into numeric and categorical (excluding target)."""
@@ -44,6 +45,7 @@ def _detect_task_type(df: pd.DataFrame, target_col: str) -> str:
 
 # ─── Pipeline builder ─────────────────────────────────────────────────────────
 
+
 def build_preprocessing_pipeline(
     df: pd.DataFrame,
     target_col: str,
@@ -56,15 +58,19 @@ def build_preprocessing_pipeline(
     # Build sklearn ColumnTransformer
     transformers = []
     if numeric_cols:
-        num_pipeline = Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-        ])
+        num_pipeline = Pipeline(
+            [
+                ("imputer", SimpleImputer(strategy="median")),
+                ("scaler", StandardScaler()),
+            ]
+        )
         transformers.append(("num", num_pipeline, numeric_cols))
     if cat_cols:
-        cat_pipeline = Pipeline([
-            ("imputer", SimpleImputer(strategy="most_frequent")),
-        ])
+        cat_pipeline = Pipeline(
+            [
+                ("imputer", SimpleImputer(strategy="most_frequent")),
+            ]
+        )
         transformers.append(("cat", cat_pipeline, cat_cols))
 
     ct = ColumnTransformer(transformers=transformers, remainder="drop")
@@ -92,7 +98,7 @@ def build_preprocessing_pipeline(
     if hasattr(X_transformed, "toarray"):
         X_transformed = X_transformed.toarray()
 
-    X_df = pd.DataFrame(X_transformed, columns=output_cols[:X_transformed.shape[1]])
+    X_df = pd.DataFrame(X_transformed, columns=output_cols[: X_transformed.shape[1]])
 
     config = {
         "numeric_cols": numeric_cols,
@@ -110,6 +116,7 @@ def build_preprocessing_pipeline(
 
 # ─── Storage helpers ──────────────────────────────────────────────────────────
 
+
 def save_preprocessed(
     X: pd.DataFrame,
     y: pd.Series,
@@ -124,22 +131,17 @@ def save_preprocessed(
     # Save CSV of preprocessed features
     buf = io.BytesIO()
     X.to_csv(buf, index=False)
-    x_path = storage_service.upload_bytes(
-        settings.S3_BUCKET_DATASETS, f"{prefix}/X.csv", buf.getvalue(), "text/csv"
-    )
+    x_path = storage_service.upload_bytes(settings.S3_BUCKET_DATASETS, f"{prefix}/X.csv", buf.getvalue(), "text/csv")
 
     # Save target series
     buf = io.BytesIO()
     y.to_csv(buf, index=False, header=True)
-    y_path = storage_service.upload_bytes(
-        settings.S3_BUCKET_DATASETS, f"{prefix}/y.csv", buf.getvalue(), "text/csv"
-    )
+    y_path = storage_service.upload_bytes(settings.S3_BUCKET_DATASETS, f"{prefix}/y.csv", buf.getvalue(), "text/csv")
 
     # Save fitted transformer (for Phase 2 — needed to apply to new data)
     transformer_bytes = pickle.dumps(transformer_obj)
     t_path = storage_service.upload_bytes(
-        settings.S3_BUCKET_MODELS, f"{prefix}/transformer.pkl",
-        transformer_bytes, "application/octet-stream"
+        settings.S3_BUCKET_MODELS, f"{prefix}/transformer.pkl", transformer_bytes, "application/octet-stream"
     )
 
     return {"X": x_path, "y": y_path, "transformer": t_path}

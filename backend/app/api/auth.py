@@ -8,9 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import hash_password, verify_password, create_access_token
+from app.core.security import create_access_token, hash_password, verify_password
 from app.models import User
-from app.schemas.auth import UserCreate, UserLogin, TokenResponse
+from app.schemas.auth import TokenResponse, UserCreate, UserLogin
 
 router = APIRouter()
 
@@ -49,5 +49,7 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me")
-async def me(current_user: dict = Depends(__import__("app.core.security", fromlist=["get_current_user"]).get_current_user)):
+async def me(
+    current_user: dict = Depends(__import__("app.core.security", fromlist=["get_current_user"]).get_current_user)
+):
     return current_user

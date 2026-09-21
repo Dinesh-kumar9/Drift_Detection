@@ -1,13 +1,14 @@
-from pydantic import BaseModel
-from typing import Optional, Any
 from datetime import datetime
+from typing import Any, Optional
+
+from pydantic import BaseModel
 
 
 class ExperimentCreate(BaseModel):
     dataset_id: str
     target_column: str
-    task_type: str = "auto"          # auto | classification | regression
-    models: list[str] = []           # empty = use all 3 defaults
+    task_type: str = "auto"  # auto | classification | regression
+    models: list[str] = []  # empty = use all 3 defaults
     test_size: float = 0.2
     random_state: int = 42
 
@@ -51,7 +52,7 @@ class ExperimentListResponse(BaseModel):
 
 
 class ComparisonResponse(BaseModel):
-    experiment_group_id: str   # shared ID for runs triggered together
+    experiment_group_id: str  # shared ID for runs triggered together
     dataset_id: str
     task_type: str
     models: list[MetricSet]

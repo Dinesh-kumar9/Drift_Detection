@@ -1,4 +1,5 @@
 """Phase 2 stub — drift check Celery tasks."""
+
 from app.workers.celery_app import celery_app
 
 

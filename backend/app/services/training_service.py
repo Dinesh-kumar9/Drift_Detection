@@ -16,10 +16,16 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.metrics import (
-    accuracy_score, f1_score, precision_score, recall_score, roc_auc_score,
-    mean_absolute_error, mean_squared_error, r2_score,
+    accuracy_score,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    precision_score,
+    r2_score,
+    recall_score,
+    roc_auc_score,
 )
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier, XGBRegressor
@@ -34,8 +40,9 @@ logger = logging.getLogger(__name__)
 
 CLASSIFICATION_MODELS = {
     "RandomForestClassifier": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1),
-    "XGBClassifier": XGBClassifier(n_estimators=100, random_state=42, eval_metric="logloss",
-                                    use_label_encoder=False, verbosity=0),
+    "XGBClassifier": XGBClassifier(
+        n_estimators=100, random_state=42, eval_metric="logloss", use_label_encoder=False, verbosity=0
+    ),
     "LogisticRegression": LogisticRegression(max_iter=1000, random_state=42),
 }
 
@@ -47,6 +54,7 @@ REGRESSION_MODELS = {
 
 
 # ─── Metric computation ───────────────────────────────────────────────────────
+
 
 def _classification_metrics(model, X_test, y_test) -> dict:
     t0 = time.perf_counter()
@@ -84,6 +92,7 @@ def _regression_metrics(model, X_test, y_test) -> dict:
 
 
 # ─── Single model trainer ─────────────────────────────────────────────────────
+
 
 def _train_single(
     model_name: str,
@@ -135,6 +144,7 @@ def _train_single(
 
 # ─── Parallel training orchestrator ──────────────────────────────────────────
 
+
 def train_all_models(
     X: pd.DataFrame,
     y: pd.Series,
@@ -149,7 +159,10 @@ def train_all_models(
     Returns list of result dicts (one per model).
     """
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state,
+        X,
+        y,
+        test_size=test_size,
+        random_state=random_state,
         stratify=y if task_type == "classification" else None,
     )
 
@@ -160,8 +173,15 @@ def train_all_models(
         futures = {
             pool.submit(
                 _train_single,
-                name, model, X_train, X_test, y_train, y_test,
-                task_type, dataset_id, experiment_group_id,
+                name,
+                model,
+                X_train,
+                X_test,
+                y_train,
+                y_test,
+                task_type,
+                dataset_id,
+                experiment_group_id,
             ): name
             for name, model in catalogue.items()
         }
@@ -171,15 +191,17 @@ def train_all_models(
             except Exception as exc:
                 model_name = futures[future]
                 logger.error("Training failed for %s: %s", model_name, exc)
-                results.append({
-                    "run_id": str(uuid.uuid4()),
-                    "model_name": model_name,
-                    "metrics": {},
-                    "artifact_s3_path": None,
-                    "params": {},
-                    "status": "failed",
-                    "error": str(exc),
-                })
+                results.append(
+                    {
+                        "run_id": str(uuid.uuid4()),
+                        "model_name": model_name,
+                        "metrics": {},
+                        "artifact_s3_path": None,
+                        "params": {},
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
 
     return results
 
