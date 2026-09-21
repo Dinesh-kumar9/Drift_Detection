@@ -1,0 +1,277 @@
+openapi: "3.1.0"
+info:
+  title: MLOps Observability Platform API
+  version: "0.1.0"
+  description: |
+    Multi-Model MLOps Observability Platform — stage-wise drift detection 
+    with root-cause attribution.
+    
+    ## Authentication
+    All endpoints (except `/health` and `/auth/login`) require a Bearer JWT token.
+    
+    ## Roles
+    - **viewer** — read-only access to dashboards
+    - **engineer** — can upload datasets, trigger training, deploy models
+    - **admin** — full access including audit logs and RBAC management
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://api.staging.mlops.example.com
+    description: Staging
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [System]
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  version: { type: string }
+                  environment: { type: string }
+
+  /auth/login:
+    post:
+      summary: Authenticate and obtain JWT token
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: JWT token returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, example: bearer }
+        "401":
+          description: Invalid credentials
+
+  /datasets:
+    post:
+      summary: Upload and validate a CSV dataset
+      tags: [Datasets]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                name: { type: string }
+      responses:
+        "201":
+          description: Dataset created
+        "422":
+          description: Schema validation failed
+
+    get:
+      summary: List all datasets
+      tags: [Datasets]
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: List of datasets
+
+  /datasets/{id}:
+    get:
+      summary: Get dataset metadata
+      tags: [Datasets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Dataset details
+        "404":
+          description: Not found
+
+  /experiments/train:
+    post:
+      summary: Kick off multi-model training run
+      tags: [Experiments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dataset_id: { type: string, format: uuid }
+                target_column: { type: string }
+                models:
+                  type: array
+                  items: { type: string }
+                  example: [RandomForestClassifier, XGBClassifier, LogisticRegression]
+      responses:
+        "202":
+          description: Training job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id: { type: string }
+                  status: { type: string, example: queued }
+
+  /experiments/{id}/compare:
+    get:
+      summary: Side-by-side model comparison
+      tags: [Experiments]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Comparison metrics for all models in this run
+
+  /models/{id}/deploy:
+    post:
+      summary: Promote model to production
+      tags: [Models]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Model deployed to production
+
+  /models/{id}/predict:
+    post:
+      summary: Run inference on deployed model
+      tags: [Models]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                features: { type: object }
+      responses:
+        "200":
+          description: Prediction result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prediction: {}
+                  confidence: { type: number }
+                  latency_ms: { type: number }
+
+  /observability/{model_id}/drift:
+    get:
+      summary: Current drift status per stage
+      tags: [Observability]
+      parameters:
+        - in: path
+          name: model_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Drift status for S1, S2, S3 stages
+
+  /observability/{model_id}/attribution:
+    get:
+      summary: Ranked root-cause attribution report
+      tags: [Observability]
+      parameters:
+        - in: path
+          name: model_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Attribution report with ranked stages
+
+  /retrain/{model_id}/trigger:
+    post:
+      summary: Trigger a retrain job
+      tags: [Retraining]
+      parameters:
+        - in: path
+          name: model_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "202":
+          description: Retrain job created (status pending)
+
+  /retrain/{job_id}/approve:
+    post:
+      summary: Approve a pending retrain job
+      tags: [Retraining]
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Job approved and queued for execution
+
+  /audit-logs:
+    get:
+      summary: Filterable audit trail
+      tags: [Audit]
+      parameters:
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: actor_id
+          schema: { type: string }
+        - in: query
+          name: from_date
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Audit log entries
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

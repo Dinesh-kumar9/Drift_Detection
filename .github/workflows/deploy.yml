@@ -1,0 +1,159 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Backend CI", "Frontend CI"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ─── Guard: only run if both CI workflows passed ──────────────────────────
+  check-ci:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - run: echo "Both CI workflows passed — proceeding to deploy"
+
+  # ─── Deploy to Staging ────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: check-ci
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy backend to ECS (staging)
+        run: |
+          aws ecs update-service \
+            --cluster mlops-observability-staging \
+            --service backend-api \
+            --force-new-deployment \
+            --region us-east-1
+
+      - name: Download frontend build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: ./dist
+
+      - name: Deploy frontend to S3 + invalidate CloudFront
+        run: |
+          aws s3 sync ./dist s3://mlops-frontend-staging/ --delete
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CF_DISTRIBUTION_ID_STAGING }} \
+            --paths "/*"
+
+      - name: Wait for ECS service stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster mlops-observability-staging \
+            --services backend-api
+
+  # ─── Integration Tests (against staging) ─────────────────────────────────
+  integration-tests:
+    name: Integration Tests (Staging)
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install httpx pytest pytest-asyncio
+
+      - name: Run integration tests against staging
+        env:
+          TEST_API_URL: ${{ secrets.STAGING_API_URL }}
+          TEST_API_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
+        run: |
+          pytest backend/tests/integration/ \
+            -v \
+            --tb=short \
+            -x
+
+  # ─── Manual Approval Gate ─────────────────────────────────────────────────
+  approve-production:
+    name: Manual Approval — Production
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    environment: production    # GitHub Environments protection rule with required reviewers
+
+    steps:
+      - run: echo "Production deploy approved — proceeding"
+
+  # ─── Deploy to Production ─────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: approve-production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy backend to ECS (production)
+        run: |
+          aws ecs update-service \
+            --cluster mlops-observability-production \
+            --service backend-api \
+            --force-new-deployment \
+            --region us-east-1
+
+      - name: Deploy frontend to S3 + invalidate CloudFront
+        run: |
+          aws s3 sync ./dist s3://mlops-frontend-production/ --delete
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CF_DISTRIBUTION_ID_PROD }} \
+            --paths "/*"
+
+      - name: Notify Slack on success
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+            -H 'Content-type: application/json' \
+            -d '{"text":"✅ MLOps Platform deployed to *production* (commit: ${{ github.sha }})"}'
+
+      - name: Auto-rollback + notify Slack on failure
+        if: failure()
+        run: |
+          # Roll back ECS to the previous task definition
+          PREV_TASK=$(aws ecs describe-services \
+            --cluster mlops-observability-production \
+            --services backend-api \
+            --query 'services[0].deployments[1].taskDefinition' \
+            --output text)
+          aws ecs update-service \
+            --cluster mlops-observability-production \
+            --service backend-api \
+            --task-definition $PREV_TASK
+
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+            -H 'Content-type: application/json' \
+            -d '{"text":"🚨 MLOps Platform production deploy FAILED — rolled back to previous version"}'

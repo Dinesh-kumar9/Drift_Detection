@@ -1,0 +1,68 @@
+# Git ignore for MLOps Observability Platform
+
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.log
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environments ───────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Environment files ──────────────────────────────────────────────────────
+.env
+backend/.env
+!backend/.env.example
+!.env.example
+
+# ── Node / Frontend ────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ── Terraform ──────────────────────────────────────────────────────────────
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfvars
+infra/terraform/override.tf
+infra/terraform/override.tf.json
+infra/terraform/.terraformrc
+
+# ── Docker ────────────────────────────────────────────────────────────────
+*.dockerignore
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Model artifacts (too large for git) ───────────────────────────────────
+*.joblib
+*.pkl
+*.h5
+*.pt
+*.onnx
+
+# ── Alembic ───────────────────────────────────────────────────────────────
+# Keep migrations — only ignore temp files
+alembic/versions/__pycache__/
