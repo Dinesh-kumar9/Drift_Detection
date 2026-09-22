@@ -1,9 +1,6 @@
 import pandas as pd
 
-from app.services.drift_service import (
-    detect_numeric_drift,
-    detect_s1_drift,
-)
+from app.services.drift_service import detect_numeric_drift, detect_s1_drift
 
 
 def test_numeric_drift_detected():
