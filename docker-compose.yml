@@ -55,7 +55,7 @@ services:
 
   # ── MinIO (local S3 replacement) ──────────────────────────────────────────
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: mlops_minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -65,8 +65,8 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # MinIO Console UI
+      - "9000:9000"
+      - "9001:9001"
     networks:
       - mlops_net
     healthcheck:
@@ -75,9 +75,9 @@ services:
       timeout: 10s
       retries: 3
 
-  # ── MinIO bucket setup (one-shot init container) ──────────────────────────
+  # ── MinIO bucket setup ───────────────────────────────────────────────────
   minio_init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: mlops_minio_init
     depends_on:
       minio:
@@ -119,14 +119,14 @@ services:
     networks:
       - mlops_net
     volumes:
-      - ./backend:/app    # hot-reload in dev
+      - ./backend:/app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # ── Celery Worker (training queue) ────────────────────────────────────────
+  # ── Celery Worker ─────────────────────────────────────────────────────────
   worker:
     build:
       context: ./backend
@@ -149,7 +149,7 @@ services:
     volumes:
       - ./backend:/app
 
-  # ── Celery Beat (drift check scheduler) ───────────────────────────────────
+  # ── Celery Beat ───────────────────────────────────────────────────────────
   beat:
     build:
       context: ./backend
@@ -168,7 +168,7 @@ services:
     volumes:
       - ./backend:/app
 
-  # ── Flower (Celery monitoring UI) ─────────────────────────────────────────
+  # ── Flower ────────────────────────────────────────────────────────────────
   flower:
     image: mher/flower:2.0
     container_name: mlops_flower
@@ -182,7 +182,7 @@ services:
     networks:
       - mlops_net
 
-  # ── Frontend (Vite dev server) ────────────────────────────────────────────
+  # ── Frontend ──────────────────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -199,4 +199,4 @@ services:
       - mlops_net
     volumes:
       - ./frontend:/app
-      - /app/node_modules    # prevent host node_modules from overwriting container's
+      - /app/node_modules

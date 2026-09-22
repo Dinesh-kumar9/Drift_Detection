@@ -20,7 +20,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Upgrade pip
+RUN python -m pip install --upgrade pip
+
+# Install project dependencies
+RUN python -m pip install --no-cache-dir -r requirements.txt
+
+# Install XGBoost separately without GPU/NCCL dependencies
+RUN python -m pip install --no-cache-dir --no-deps xgboost==2.1.1
 
 # Copy application source
 COPY . .
