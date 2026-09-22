@@ -57,11 +57,7 @@ async def _run_drift_check_all_models(window_size: int = 100) -> dict:
             }
 
         # 2. Find the experiment run associated with the model
-        run_result = await db.execute(
-            select(ExperimentRun).where(
-                ExperimentRun.id == model_version.run_id
-            )
-        )
+        run_result = await db.execute(select(ExperimentRun).where(ExperimentRun.id == model_version.run_id))
         experiment_run = run_result.scalars().first()
 
         if experiment_run is None:
@@ -76,11 +72,7 @@ async def _run_drift_check_all_models(window_size: int = 100) -> dict:
             }
 
         # 3. Fetch the training dataset and its baseline statistics
-        dataset_result = await db.execute(
-            select(Dataset).where(
-                Dataset.id == experiment_run.dataset_id
-            )
-        )
+        dataset_result = await db.execute(select(Dataset).where(Dataset.id == experiment_run.dataset_id))
         dataset = dataset_result.scalars().first()
 
         if dataset is None:
@@ -108,9 +100,7 @@ async def _run_drift_check_all_models(window_size: int = 100) -> dict:
         # 4. Fetch recent production prediction inputs
         prediction_result = await db.execute(
             select(Prediction)
-            .where(
-                Prediction.model_version_id == model_version.id
-            )
+            .where(Prediction.model_version_id == model_version.id)
             .order_by(Prediction.predicted_at.desc())
             .limit(window_size)
         )
@@ -130,9 +120,7 @@ async def _run_drift_check_all_models(window_size: int = 100) -> dict:
             }
 
         # 5. Convert stored input snapshots into a DataFrame
-        current_df = pd.DataFrame(
-            [prediction.input_snapshot for prediction in predictions]
-        )
+        current_df = pd.DataFrame([prediction.input_snapshot for prediction in predictions])
 
         if current_df.empty:
             return {
@@ -165,8 +153,7 @@ async def _run_drift_check_all_models(window_size: int = 100) -> dict:
         await db.commit()
 
         logger.info(
-            "S1 drift check completed: model=%s predictions=%s "
-            "features_checked=%s events_created=%s",
+            "S1 drift check completed: model=%s predictions=%s " "features_checked=%s events_created=%s",
             model_version.id,
             len(predictions),
             len(drift_results),

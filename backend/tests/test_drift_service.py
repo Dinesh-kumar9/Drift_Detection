@@ -29,15 +29,9 @@ def test_numeric_no_drift():
 
 
 def test_s1_drift_detection():
-    baseline = {
-        "temperature": {
-            "values_sample": [10, 11, 12, 10, 11, 12, 10, 11, 12, 10]
-        }
-    }
+    baseline = {"temperature": {"values_sample": [10, 11, 12, 10, 11, 12, 10, 11, 12, 10]}}
 
-    current = pd.DataFrame({
-        "temperature": [20, 21, 22, 20, 21, 22, 20, 21, 22, 20]
-    })
+    current = pd.DataFrame({"temperature": [20, 21, 22, 20, 21, 22, 20, 21, 22, 20]})
 
     results = detect_s1_drift(baseline, current)
 
