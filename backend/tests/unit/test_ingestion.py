@@ -4,8 +4,6 @@ Tests CSV parsing, schema inference, and baseline stat computation.
 No DB or MinIO required — fully isolated.
 """
 
-import io
-
 import numpy as np
 import pandas as pd
 import pytest

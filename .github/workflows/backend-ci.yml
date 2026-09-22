@@ -102,7 +102,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Build Docker image (smoke test)
+        run: |
+          docker build \
+            --target api \
+            -t mlops-observability/backend:latest \
+            ./backend
+
+      - name: Check AWS credentials
+        id: check_aws
+        env:
+          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        run: |
+          if [ -n "$AWS_KEY" ]; then
+            echo "has_creds=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_creds=false" >> $GITHUB_OUTPUT
+            echo "AWS_ACCESS_KEY_ID not set. Skipping ECR push."
+          fi
+
       - name: Configure AWS credentials
+        if: steps.check_aws.outputs.has_creds == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -110,19 +130,18 @@ jobs:
           aws-region: us-east-1
 
       - name: Login to Amazon ECR
+        if: steps.check_aws.outputs.has_creds == 'true'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push image to ECR
+      - name: Push image to ECR
+        if: steps.check_aws.outputs.has_creds == 'true'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build \
-            --target api \
-            -t $ECR_REGISTRY/mlops-observability/backend:$IMAGE_TAG \
-            -t $ECR_REGISTRY/mlops-observability/backend:latest \
-            ./backend
+          docker tag mlops-observability/backend:latest $ECR_REGISTRY/mlops-observability/backend:$IMAGE_TAG
+          docker tag mlops-observability/backend:latest $ECR_REGISTRY/mlops-observability/backend:latest
           docker push $ECR_REGISTRY/mlops-observability/backend:$IMAGE_TAG
           docker push $ECR_REGISTRY/mlops-observability/backend:latest
-          echo "image=$ECR_REGISTRY/mlops-observability/backend:$IMAGE_TAG" >> $GITHUB_OUTPUT
+

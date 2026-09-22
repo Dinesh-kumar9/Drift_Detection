@@ -4,8 +4,6 @@ Tests metric computation, model catalogue, and best-model selection.
 No DB or MinIO required — uses mocking for storage.
 """
 
-from unittest.mock import MagicMock, patch
-
 import numpy as np
 import pandas as pd
 import pytest

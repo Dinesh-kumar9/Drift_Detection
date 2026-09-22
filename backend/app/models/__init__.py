@@ -256,11 +256,6 @@ class AuditLog(Base):
     action = Column(String(100), nullable=False)
     target_type = Column(String(50), nullable=True)
     target_id = Column(UUID(as_uuid=False), nullable=True)
-
-    # "metadata" is reserved by SQLAlchemy's Declarative API.
-    # Keep the database column name "metadata" while using
-    # "metadata_" as the Python attribute.
-    metadata_ = Column("metadata", JSONB, nullable=True)
-
+    extra_metadata = Column("metadata", JSONB, nullable=True)
     ip_address = Column(String(45), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)

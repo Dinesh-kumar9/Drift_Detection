@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -94,7 +94,7 @@ async def deploy_model(
         action="model.deploy",
         target_type="model_version",
         target_id=model_version_id,
-        metadata={"sla_tier": payload.sla_tier, "model_type": run.model_type if run else None},
+        extra_metadata={"sla_tier": payload.sla_tier, "model_type": run.model_type if run else None},
         created_at=datetime.now(timezone.utc),
     )
     db.add(audit)
