@@ -28,7 +28,7 @@ boto3==1.35.30                  # S3 / MinIO client
 pandas==2.2.3
 numpy==1.26.4
 scikit-learn==1.5.2
-xgboost==2.1.1
+# XGBoost is installed separately in Docker without GPU/NCCL dependencies
 joblib==1.4.2                   # model serialisation
 
 # ── Drift Detection ───────────────────────────────────────────────────────────
@@ -51,3 +51,4 @@ anyio==4.4.0                    # async test utilities
 black==24.10.0
 flake8==7.1.1
 isort==5.13.2
+email-validator==2.2.0
