@@ -1,20 +1,23 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Database, FlaskConical, GitCompare, Activity, RefreshCcw,
-  Cpu, ChevronRight, Bell,
+  Cpu, ChevronRight, Bell, LogOut,
 } from 'lucide-react'
 import clsx from 'clsx'
+import { useAuth } from '../auth/AuthContext'
 
 const NAV_ITEMS = [
   { to: '/datasets',      label: 'Datasets',       icon: Database,      phase: 1 },
   { to: '/experiments',   label: 'Experiments',     icon: FlaskConical,  phase: 1 },
-  { to: '/models',        label: 'Model Comparison',icon: GitCompare,    phase: 1 },
+  { to: '/models',        label: 'Model Registry',  icon: GitCompare,    phase: 1 },
   { to: '/observability', label: 'Observability',   icon: Activity,      phase: 2 },
   { to: '/retrain',       label: 'Retrain Console', icon: RefreshCcw,    phase: 3 },
 ]
 
 export default function Layout() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface">
@@ -61,13 +64,21 @@ export default function Layout() {
         {/* Footer */}
         <div className="px-4 py-4 border-t border-surface-border">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-400 to-accent flex items-center justify-center text-[11px] font-bold text-white">
-              U
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-brand-400 to-accent flex items-center justify-center text-[11px] font-bold text-white uppercase">
+              {user?.email.charAt(0) ?? '?'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-slate-300 truncate">MLOps Engineer</p>
-              <p className="text-[10px] text-slate-600">engineer</p>
+              <p className="text-xs font-medium text-slate-300 truncate" title={user?.email}>{user?.email}</p>
+              <p className="text-[10px] text-slate-600">{user?.role}</p>
             </div>
+            <button
+              onClick={() => { logout(); navigate('/login', { replace: true }) }}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-surface-border transition-colors"
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <LogOut size={14} />
+            </button>
           </div>
         </div>
       </aside>

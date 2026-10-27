@@ -96,12 +96,12 @@ jobs:
       - name: Install test dependencies
         run: pip install httpx pytest pytest-asyncio
 
-      - name: Run integration tests against staging
+      - name: Run smoke tests against staging
         env:
           TEST_API_URL: ${{ secrets.STAGING_API_URL }}
           TEST_API_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
         run: |
-          pytest backend/tests/integration/ \
+          pytest backend/tests/smoke/ \
             -v \
             --tb=short \
             -x

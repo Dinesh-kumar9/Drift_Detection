@@ -51,11 +51,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
-
-
-async def init_db() -> None:
-    """Create all tables on startup (dev only — use Alembic for migrations in prod)."""
-    async with engine.begin() as conn:
-        from app.models import Base as ModelsBase  # noqa: F401 — triggers registration
-
-        await conn.run_sync(ModelsBase.metadata.create_all)

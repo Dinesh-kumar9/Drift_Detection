@@ -56,6 +56,16 @@ def download_to_buffer(bucket: str, key: str) -> io.BytesIO:
     return io.BytesIO(data)
 
 
+def parse_s3_uri(uri: str) -> tuple[str, str]:
+    """'s3://bucket/key/path' → ('bucket', 'key/path')."""
+    bucket, _, key = uri.removeprefix("s3://").partition("/")
+    return bucket, key
+
+
+def download_uri(uri: str) -> bytes:
+    return download_bytes(*parse_s3_uri(uri))
+
+
 def object_exists(bucket: str, key: str) -> bool:
     client = _get_client()
     try:

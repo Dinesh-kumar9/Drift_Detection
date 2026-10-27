@@ -4,7 +4,7 @@ export interface Dataset {
   id: string
   name: string
   s3_path: string
-  row_count: string | null
+  row_count: number | null
   schema_json: Record<string, { dtype: string; null_count: number; null_pct: number; unique_count: number }> | null
   baseline_stats: Record<string, unknown> | null
   uploaded_at: string

@@ -21,7 +21,7 @@ class DatasetResponse(BaseModel):
     id: str
     name: str
     s3_path: str
-    row_count: Optional[str]
+    row_count: Optional[int]
     schema_json: Optional[dict]
     baseline_stats: Optional[dict]
     uploaded_at: datetime

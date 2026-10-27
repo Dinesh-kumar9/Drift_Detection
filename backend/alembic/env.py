@@ -12,19 +12,20 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from app.core.config import settings
 
 # Import all models so Alembic can detect changes
 from app.models import Base  # noqa: F401
 
 # ─── Alembic Config ──────────────────────────────────────────────────────────
 config = context.config
-fileConfig(config.config_file_name)
+if config.config_file_name and not config.attributes.get("skip_logging_config"):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 target_metadata = Base.metadata
 
-# Override URL from environment variable if set
-db_url = os.environ.get("DATABASE_URL")
-if db_url:
-    config.set_main_option("sqlalchemy.url", db_url)
+# URL precedence: programmatic (tests / bootstrap) → DATABASE_URL env → app settings (.env)
+db_url = config.attributes.get("sqlalchemy.url") or os.environ.get("DATABASE_URL") or settings.DATABASE_URL
+config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))  # escape ConfigParser interpolation
 
 
 # ─── Offline Mode ────────────────────────────────────────────────────────────

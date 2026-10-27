@@ -6,24 +6,26 @@ Phase 4 will swap JWT_SECRET_KEY verification for AWS Cognito public keys.
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
 # ─── Password Hashing ────────────────────────────────────────────────────────
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt directly — passlib is unmaintained and breaks with bcrypt ≥ 4.1.
 
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(plain.encode()[:72], bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(plain.encode()[:72], hashed.encode())
+    except ValueError:  # malformed hash
+        return False
 
 
 # ─── JWT Tokens ──────────────────────────────────────────────────────────────
@@ -34,6 +36,7 @@ security_scheme = HTTPBearer()
 def create_access_token(
     subject: str,
     role: str = "viewer",
+    email: Optional[str] = None,
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     """Create a signed JWT access token."""
@@ -41,6 +44,7 @@ def create_access_token(
     payload = {
         "sub": subject,
         "role": role,
+        "email": email,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
