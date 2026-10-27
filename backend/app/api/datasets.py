@@ -23,7 +23,7 @@ async def upload_dataset(
     current_user: dict = Depends(get_current_user),
 ):
     """Upload a CSV dataset with schema validation and baseline stat computation."""
-    if not file.filename.endswith(".csv"):
+    if not (file.filename or "").lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
 
     content = await file.read()
@@ -32,13 +32,16 @@ async def upload_dataset(
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="File is empty")
 
-    dataset = await ingestion_service.ingest_dataset(
-        db=db,
-        file_bytes=content,
-        filename=file.filename,
-        dataset_name=name,
-        owner_id=current_user.get("sub"),
-    )
+    try:
+        dataset = await ingestion_service.ingest_dataset(
+            db=db,
+            file_bytes=content,
+            filename=file.filename,
+            dataset_name=name,
+            owner_id=current_user.get("sub"),
+        )
+    except ingestion_service.DatasetValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return DatasetResponse.model_validate(dataset)
 
 

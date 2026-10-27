@@ -1,18 +1,20 @@
 """
-Training Service — Phase 1
-Trains RandomForest, XGBoost, and LogisticRegression/LinearRegression
-in parallel, logs metrics, saves artifacts to MinIO.
+Training Service
+Trains RandomForest, XGBoost, and LogisticRegression/Ridge in parallel on a
+shared train/test split and computes comparable metrics.
+
+Pure ML — no storage or DB access. The training worker packages the fitted
+models into ModelBundles and persists them.
 """
 
 import logging
-import pickle
 import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import (
@@ -28,19 +30,17 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier, XGBRegressor
 
-from app.core.config import settings
-from app.services import storage_service
+from app.core.utils import json_safe
 
 logger = logging.getLogger(__name__)
 
 
 # ─── Model catalogue ──────────────────────────────────────────────────────────
+# Unfitted templates — always `clone()` before fitting so concurrent jobs never share state.
 
 CLASSIFICATION_MODELS = {
     "RandomForestClassifier": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1),
-    "XGBClassifier": XGBClassifier(
-        n_estimators=100, random_state=42, eval_metric="logloss", use_label_encoder=False, verbosity=0
-    ),
+    "XGBClassifier": XGBClassifier(n_estimators=100, random_state=42, eval_metric="logloss", verbosity=0),
     "LogisticRegression": LogisticRegression(max_iter=1000, random_state=42),
 }
 
@@ -49,6 +49,12 @@ REGRESSION_MODELS = {
     "XGBRegressor": XGBRegressor(n_estimators=100, random_state=42, verbosity=0),
     "Ridge": Ridge(random_state=42),
 }
+
+PRIMARY_METRIC = {"classification": "f1", "regression": "r2"}
+
+
+def get_catalogue(task_type: str) -> dict[str, Any]:
+    return CLASSIFICATION_MODELS if task_type == "classification" else REGRESSION_MODELS
 
 
 # ─── Metric computation ───────────────────────────────────────────────────────
@@ -94,110 +100,102 @@ def _regression_metrics(model, X_test, y_test) -> dict:
 
 def _train_single(
     model_name: str,
-    model,
-    X_train: pd.DataFrame,
-    X_test: pd.DataFrame,
-    y_train: pd.Series,
-    y_test: pd.Series,
+    template,
+    X_train: np.ndarray,
+    X_test: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
     task_type: str,
-    dataset_id: str,
-    experiment_group_id: str,
 ) -> dict:
-    """Train one model, compute metrics, save artifact. Returns result dict."""
-    run_id = str(uuid.uuid4())
-    logger.info("Training %s (run_id=%s)", model_name, run_id)
+    """Fit a fresh clone of `template` and compute test metrics."""
+    logger.info("Training %s", model_name)
+    model = clone(template)
 
     t0 = time.perf_counter()
     model.fit(X_train, y_train)
     training_time = round(time.perf_counter() - t0, 2)
 
-    # Metrics
     if task_type == "classification":
         metrics = _classification_metrics(model, X_test, y_test)
     else:
         metrics = _regression_metrics(model, X_test, y_test)
     metrics["training_time_s"] = training_time
-
-    # Save artifact to MinIO
-    artifact_key = f"models/{dataset_id}/{experiment_group_id}/{run_id}/{model_name}.pkl"
-    model_bytes = pickle.dumps(model)
-    artifact_s3_path = storage_service.upload_bytes(
-        bucket=settings.S3_BUCKET_MODELS,
-        key=artifact_key,
-        data=model_bytes,
-        content_type="application/octet-stream",
-    )
+    metrics["n_train"] = int(len(y_train))
+    metrics["n_test"] = int(len(y_test))
 
     logger.info("%s → metrics: %s", model_name, metrics)
     return {
-        "run_id": run_id,
         "model_name": model_name,
         "model": model,
-        "metrics": metrics,
-        "artifact_s3_path": artifact_s3_path,
-        "params": model.get_params(),
+        "metrics": json_safe(metrics),
+        "params": json_safe(model.get_params()),
         "status": "completed",
+        "error": None,
     }
 
 
 # ─── Parallel training orchestrator ──────────────────────────────────────────
 
 
+def _split(X: np.ndarray, y: np.ndarray, task_type: str, test_size: float, random_state: int):
+    """Stratify classification splits when every class has ≥ 2 rows; otherwise fall back to a plain split."""
+    stratify = None
+    if task_type == "classification":
+        _, counts = np.unique(y, return_counts=True)
+        if counts.min() >= 2:
+            stratify = y
+    try:
+        return train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=stratify)
+    except ValueError:
+        # e.g. test split smaller than the number of classes
+        return train_test_split(X, y, test_size=test_size, random_state=random_state)
+
+
 def train_all_models(
     X: pd.DataFrame,
     y: pd.Series,
     task_type: str,
-    dataset_id: str,
-    experiment_group_id: str,
+    model_names: list[str] | None = None,
     test_size: float = 0.2,
     random_state: int = 42,
 ) -> list[dict]:
     """
-    Train all models in parallel using ThreadPoolExecutor.
-    Returns list of result dicts (one per model).
+    Train the requested models (default: whole catalogue for `task_type`) in parallel.
+    Models are fit on plain numpy arrays: XGBoost rejects feature names containing
+    `[`, `]` or `<`, which one-hot columns like "income_<=50K" produce.
+
+    Returns one result dict per model; failures are captured, not raised.
     """
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=y if task_type == "classification" else None,
+    catalogue = get_catalogue(task_type)
+    names = model_names or list(catalogue.keys())
+    unknown = [n for n in names if n not in catalogue]
+    if unknown:
+        raise ValueError(f"Unknown {task_type} model(s): {unknown}")
+
+    X_train, X_test, y_train, y_test = _split(
+        np.asarray(X, dtype=float), np.asarray(y), task_type, test_size, random_state
     )
 
-    catalogue = CLASSIFICATION_MODELS if task_type == "classification" else REGRESSION_MODELS
-
     results = []
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=len(names)) as pool:
         futures = {
-            pool.submit(
-                _train_single,
-                name,
-                model,
-                X_train,
-                X_test,
-                y_train,
-                y_test,
-                task_type,
-                dataset_id,
-                experiment_group_id,
-            ): name
-            for name, model in catalogue.items()
+            pool.submit(_train_single, name, catalogue[name], X_train, X_test, y_train, y_test, task_type): name
+            for name in names
         }
         for future in as_completed(futures):
+            model_name = futures[future]
             try:
                 results.append(future.result())
             except Exception as exc:
-                model_name = futures[future]
-                logger.error("Training failed for %s: %s", model_name, exc)
+                logger.exception("Training failed for %s", model_name)
                 results.append(
                     {
-                        "run_id": str(uuid.uuid4()),
                         "model_name": model_name,
+                        "model": None,
                         "metrics": {},
-                        "artifact_s3_path": None,
                         "params": {},
                         "status": "failed",
-                        "error": str(exc),
+                        "error": f"{type(exc).__name__}: {exc}",
                     }
                 )
 
@@ -209,5 +207,5 @@ def pick_best_model(results: list[dict], task_type: str) -> dict | None:
     completed = [r for r in results if r["status"] == "completed"]
     if not completed:
         return None
-    key = "f1" if task_type == "classification" else "r2"
-    return max(completed, key=lambda r: r["metrics"].get(key, -999))
+    key = PRIMARY_METRIC.get(task_type, "f1")
+    return max(completed, key=lambda r: r["metrics"].get(key) if r["metrics"].get(key) is not None else -999)

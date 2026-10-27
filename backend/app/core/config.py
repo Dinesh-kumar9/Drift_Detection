@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "local"  # local | staging | production
+    GIT_COMMIT: Optional[str] = None  # injected at image build time — recorded on every run (reproducibility NFR)
+
+    # ─── Bootstrap ────────────────────────────────────────────────────────────
+    RUN_MIGRATIONS_ON_STARTUP: bool = True
+    SEED_DEMO_USERS: bool = True  # only honoured when ENVIRONMENT == "local"
+
+    # ─── Serving ──────────────────────────────────────────────────────────────
+    MODEL_CACHE_SIZE: int = 32  # model bundles kept in memory per API process
 
     # ─── Database ─────────────────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://mlops:mlops@localhost:5432/mlops_db"

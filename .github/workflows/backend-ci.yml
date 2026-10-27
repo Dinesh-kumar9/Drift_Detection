@@ -46,12 +46,13 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+asyncpg://mlops:mlops@localhost:5432/mlops_test
+      TEST_DATABASE_URL: postgresql+asyncpg://mlops:mlops@localhost:5432/mlops_test
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/0
       CELERY_RESULT_BACKEND: redis://localhost:6379/1
       JWT_SECRET_KEY: ci-test-secret-key-not-for-production
       ENVIRONMENT: local
-      S3_ENDPOINT_URL: ""        # no MinIO in CI — S3 calls are mocked
+      S3_ENDPOINT_URL: ""        # no MinIO in CI — S3 is mocked with moto
 
     steps:
       - name: Checkout
@@ -76,13 +77,20 @@ jobs:
       - name: Import sort check (isort)
         run: isort --check-only --settings-file=setup.cfg .
 
-      - name: Run unit tests with coverage
+      - name: Migrations (upgrade → check for model drift → downgrade → upgrade)
         run: |
-          pytest tests/unit/ \
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Run unit + integration tests with coverage
+        run: |
+          pytest tests/unit/ tests/integration/ \
             --cov=app \
             --cov-report=xml \
             --cov-report=term-missing \
-            --cov-fail-under=40 \
+            --cov-fail-under=60 \
             -v
 
       - name: Upload coverage report
@@ -106,6 +114,7 @@ jobs:
         run: |
           docker build \
             --target api \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
             -t mlops-observability/backend:latest \
             ./backend
 

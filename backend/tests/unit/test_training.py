@@ -1,8 +1,10 @@
 """
 Unit tests for training service.
-Tests metric computation, model catalogue, and best-model selection.
-No DB or MinIO required — uses mocking for storage.
+Tests metric computation, model catalogue, parallel training and best-model selection.
+No DB or MinIO required.
 """
+
+import json
 
 import numpy as np
 import pandas as pd
@@ -10,12 +12,14 @@ import pytest
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LinearRegression
 
+from app.services.preprocessing_service import build_preprocessing_pipeline
 from app.services.training_service import (
     CLASSIFICATION_MODELS,
     REGRESSION_MODELS,
     _classification_metrics,
     _regression_metrics,
     pick_best_model,
+    train_all_models,
 )
 
 
@@ -51,6 +55,23 @@ def trained_reg(simple_reg_data):
     model = LinearRegression()
     model.fit(X, y)
     return model, X, y
+
+
+@pytest.fixture
+def mixed_clf_df():
+    """Realistic mixed-type data: categorical features with XGBoost-unsafe values, 3 string classes."""
+    rng = np.random.default_rng(7)
+    n = 300
+    x = rng.normal(size=n)
+    return pd.DataFrame(
+        {
+            "x": x,
+            "z": rng.normal(size=n),
+            "income": rng.choice(["<=50K", ">50K"], n),
+            "city": rng.choice(["NY", "SF", "LA"], n),
+            "label": np.where(x > 0.5, "high", np.where(x < -0.5, "low", "mid")),
+        }
+    )
 
 
 class TestClassificationMetrics:
@@ -108,6 +129,53 @@ class TestRegressionMetrics:
         metrics = _regression_metrics(model, X, y)
         assert "latency_ms" in metrics
         assert metrics["latency_ms"] >= 0
+
+
+class TestTrainAllModels:
+    def test_all_classifiers_train_on_mixed_data(self, mixed_clf_df):
+        """Covers categorical encoding, string labels, and XGBoost-unsafe feature names end to end."""
+        X, y, _, _ = build_preprocessing_pipeline(mixed_clf_df, "label")
+        results = train_all_models(X, y, "classification")
+        statuses = {r["model_name"]: (r["status"], r["error"]) for r in results}
+        assert statuses == {name: ("completed", None) for name in CLASSIFICATION_MODELS}
+        for r in results:
+            assert r["metrics"]["n_train"] + r["metrics"]["n_test"] == len(X)
+
+    def test_all_regressors_train(self, simple_reg_data):
+        X, y = simple_reg_data
+        results = train_all_models(X, y, "regression")
+        assert {r["model_name"] for r in results if r["status"] == "completed"} == set(REGRESSION_MODELS)
+
+    def test_catalogue_templates_are_never_fitted(self, simple_clf_data):
+        """Jobs must clone templates — fitting the shared instances leaks state between jobs."""
+        X, y = simple_clf_data
+        results = train_all_models(X, y, "classification", model_names=["RandomForestClassifier"])
+        assert results[0]["model"] is not CLASSIFICATION_MODELS["RandomForestClassifier"]
+        assert not hasattr(CLASSIFICATION_MODELS["RandomForestClassifier"], "estimators_")
+
+    def test_model_subset(self, simple_clf_data):
+        X, y = simple_clf_data
+        results = train_all_models(X, y, "classification", model_names=["LogisticRegression"])
+        assert [r["model_name"] for r in results] == ["LogisticRegression"]
+
+    def test_unknown_model_raises(self, simple_clf_data):
+        X, y = simple_clf_data
+        with pytest.raises(ValueError, match="Unknown"):
+            train_all_models(X, y, "classification", model_names=["Ridge"])
+
+    def test_singleton_class_falls_back_to_unstratified_split(self, simple_clf_data):
+        X, y = simple_clf_data
+        y = y.copy()
+        y.iloc[0] = 2  # a class with a single row can't be stratified
+        results = train_all_models(X, y, "classification", model_names=["RandomForestClassifier"])
+        assert results[0]["status"] == "completed"
+
+    def test_params_and_metrics_are_jsonb_safe(self, simple_clf_data):
+        """XGBoost's get_params() contains missing=nan, which Postgres JSONB rejects."""
+        X, y = simple_clf_data
+        for r in train_all_models(X, y, "classification"):
+            json.dumps(r["params"], allow_nan=False)
+            json.dumps(r["metrics"], allow_nan=False)
 
 
 class TestPickBestModel:

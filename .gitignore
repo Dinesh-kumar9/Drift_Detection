@@ -45,9 +45,6 @@ infra/terraform/override.tf
 infra/terraform/override.tf.json
 infra/terraform/.terraformrc
 
-# ── Docker ────────────────────────────────────────────────────────────────
-*.dockerignore
-
 # ── IDE / OS ──────────────────────────────────────────────────────────────
 .idea/
 .vscode/
@@ -66,3 +63,6 @@ Thumbs.db
 # ── Alembic ───────────────────────────────────────────────────────────────
 # Keep migrations — only ignore temp files
 alembic/versions/__pycache__/
+
+# ── Celery ─────────────────────────────────────────────────────────────────
+celerybeat-schedule*

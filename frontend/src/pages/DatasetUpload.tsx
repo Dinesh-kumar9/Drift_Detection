@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { datasetsApi, type Dataset } from '../api/datasets'
+import { errorMessage } from '../api/client'
 import { Upload, Database, CheckCircle, AlertCircle, FileText, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -15,9 +16,9 @@ function UploadZone({ onUpload }: { onUpload: (file: File, name: string) => void
     e.preventDefault()
     setDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file?.name.endsWith('.csv')) {
+    if (file?.name.toLowerCase().endsWith('.csv')) {
       setSelectedFile(file)
-      setDatasetName(file.name.replace('.csv', ''))
+      setDatasetName(file.name.replace(/\.csv$/i, ''))
     }
   }, [])
 
@@ -25,7 +26,7 @@ function UploadZone({ onUpload }: { onUpload: (file: File, name: string) => void
     const file = e.target.files?.[0]
     if (file) {
       setSelectedFile(file)
-      setDatasetName(file.name.replace('.csv', ''))
+      setDatasetName(file.name.replace(/\.csv$/i, ''))
     }
   }
 
@@ -172,7 +173,7 @@ function DatasetRow({ dataset, onSelect, selected }: {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-200 truncate">{dataset.name}</p>
         <p className="text-xs text-slate-500 font-mono">
-          {dataset.row_count ? `${parseInt(dataset.row_count).toLocaleString()} rows` : '—'} · {cols} cols
+          {dataset.row_count != null ? `${dataset.row_count.toLocaleString()} rows` : '—'} · {cols} cols
         </p>
       </div>
       <div className="text-right flex-shrink-0">
@@ -201,15 +202,12 @@ export default function DatasetUpload() {
     mutationFn: ({ file, name }: { file: File; name: string }) => datasetsApi.upload(file, name),
     onSuccess: (newDs) => {
       queryClient.invalidateQueries({ queryKey: ['datasets'] })
-      setSuccessMsg(`"${newDs.name}" uploaded successfully — ${parseInt(newDs.row_count ?? '0').toLocaleString()} rows detected`)
+      setSuccessMsg(`"${newDs.name}" uploaded successfully — ${(newDs.row_count ?? 0).toLocaleString()} rows detected`)
       setSelectedDataset(newDs)
       setUploadError(null)
       setTimeout(() => setSuccessMsg(null), 5000)
     },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Upload failed'
-      setUploadError(msg)
-    },
+    onError: (err: unknown) => setUploadError(errorMessage(err, 'Upload failed')),
   })
 
   return (
@@ -282,8 +280,8 @@ export default function DatasetUpload() {
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Schema Preview</p>
                   <p className="text-lg font-bold text-slate-100 mt-1">{selectedDataset.name}</p>
                   <p className="text-xs text-slate-500 font-mono mt-0.5">
-                    {selectedDataset.row_count
-                      ? `${parseInt(selectedDataset.row_count).toLocaleString()} rows`
+                    {selectedDataset.row_count != null
+                      ? `${selectedDataset.row_count.toLocaleString()} rows`
                       : '—'}{' '}
                     · {selectedDataset.schema_json ? Object.keys(selectedDataset.schema_json).length : 0} columns
                   </p>

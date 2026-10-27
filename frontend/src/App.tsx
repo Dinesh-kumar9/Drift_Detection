@@ -1,7 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import Layout from './components/Layout'
+import AuthProvider from './auth/AuthProvider'
+import RequireAuth from './auth/RequireAuth'
+import Login from './pages/Login'
 
 // ── Lazy-loaded pages ─────────────────────────────────────────────────────
 const DatasetUpload        = lazy(() => import('./pages/DatasetUpload'))
@@ -28,56 +31,34 @@ function PageLoader() {
   )
 }
 
+const page = (element: ReactNode) => <Suspense fallback={<PageLoader />}>{element}</Suspense>
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/datasets" replace />} />
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
             <Route
-              path="datasets"
+              path="/"
               element={
-                <Suspense fallback={<PageLoader />}>
-                  <DatasetUpload />
-                </Suspense>
+                <RequireAuth>
+                  <Layout />
+                </RequireAuth>
               }
-            />
-            <Route
-              path="experiments"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <ExperimentDashboard />
-                </Suspense>
-              }
-            />
-            <Route
-              path="models"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <ModelComparison />
-                </Suspense>
-              }
-            />
-            <Route
-              path="observability"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <ObservabilityDashboard />
-                </Suspense>
-              }
-            />
-            <Route
-              path="retrain"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <RetrainApproval />
-                </Suspense>
-              }
-            />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+            >
+              <Route index element={<Navigate to="/datasets" replace />} />
+              <Route path="datasets" element={page(<DatasetUpload />)} />
+              <Route path="experiments" element={page(<ExperimentDashboard />)} />
+              <Route path="models" element={page(<ModelComparison />)} />
+              <Route path="observability" element={page(<ObservabilityDashboard />)} />
+              <Route path="retrain" element={page(<RetrainApproval />)} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </QueryClientProvider>
   )
 }

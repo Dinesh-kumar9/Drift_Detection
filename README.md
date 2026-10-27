@@ -117,15 +117,39 @@ cd Drift_Detection
 
 cp backend/.env.example backend/.env   # configure secrets
 
-docker-compose up --build
+docker compose up --build
 ```
+
+On start the API container applies all Alembic migrations and (in `ENVIRONMENT=local`) seeds demo users:
 
 | Service | URL | Credentials |
 |---|---|---|
-| **Frontend** | http://localhost:3000 | — |
-| **Backend Swagger** | http://localhost:8000/docs | — |
+| **Frontend** | http://localhost:3000 | `engineer@example.com` / `engineer1234` (also `admin@…`/`admin1234`, `viewer@…`/`viewer1234`) |
+| **Backend Swagger** | http://localhost:8000/docs | same accounts via `POST /auth/login` |
 | **MinIO Console** | http://localhost:9001 | minioadmin / minioadmin |
 | **Flower** (task monitor) | http://localhost:5555 | — |
+
+Run the whole lifecycle (upload → train → compare → deploy → predict → feedback) against the running stack:
+
+```bash
+cd backend && python scripts/demo_lifecycle.py
+```
+
+> Upgrading from a pre-Phase-1.5 checkout? Tables used to be created with `create_all`; reset the
+> local database once with `docker compose down -v` so Alembic can own the schema.
+
+### Running tests
+
+```bash
+cd backend
+pip install -r requirements.txt
+pytest tests/unit                                    # pure-Python, no services needed
+
+# integration tests need a throwaway Postgres (tables are truncated!)
+docker run -d --name mlops_test_pg -e POSTGRES_USER=mlops -e POSTGRES_PASSWORD=mlops \
+  -e POSTGRES_DB=mlops_test -p 5433:5432 postgres:16-alpine
+TEST_DATABASE_URL=postgresql+asyncpg://mlops:mlops@localhost:5433/mlops_test pytest tests/
+```
 
 ---
 
@@ -175,11 +199,13 @@ flowchart LR
 
 ---
 
-## 🗄️ Data Model (9 Tables)
+## 🗄️ Data Model (11 Tables)
 
 ```mermaid
 erDiagram
-    datasets ||--o{ experiment_runs : "trains"
+    datasets ||--o{ experiment_groups : "trains"
+    experiment_groups ||--o{ experiment_runs : "one per model"
+    registered_models ||--o{ model_versions : "lineage"
     experiment_runs ||--o{ model_versions : "produces"
     model_versions ||--o{ predictions : "generates"
     model_versions ||--o{ drift_events : "monitored by"
@@ -190,6 +216,18 @@ erDiagram
         varchar name
         varchar s3_path
         jsonb   baseline_stats
+    }
+    registered_models {
+        uuid    id
+        varchar name
+        varchar target_column
+        varchar task_type
+    }
+    experiment_groups {
+        uuid    id
+        varchar target_column
+        varchar status
+        text    error
     }
     experiment_runs {
         uuid    id
@@ -206,7 +244,9 @@ erDiagram
     predictions {
         uuid      id
         jsonb     input_snapshot
+        jsonb     features_snapshot
         jsonb     output
+        jsonb     actual
         float     latency_ms
         timestamp predicted_at
     }
@@ -264,7 +304,8 @@ flowchart LR
 | Phase | Goal | Status |
 |---|---|---|
 | **Phase 0** — Foundation | Scaffold, Docker Compose, CI/CD, Architecture | ✅ **Complete** |
-| **Phase 1** — Core Lifecycle | Upload → Train → Compare → Deploy → Predict | 🔲 Planned |
+| **Phase 1** — Core Lifecycle | Upload → Train → Compare → Deploy → Predict | ✅ **Complete** (hardened in 1.5) |
+| **Phase 1.5** — Make it real | Model bundles, registry lineages, 3-stage prediction logging, auth UI, integration tests | ✅ **Complete** |
 | **Phase 2** — Observability ⭐ | Stage drift detection + root-cause attribution | 🔲 Planned |
 | **Phase 3** — Retraining Loop | Cost-gated, human-approved closed-loop retrain | 🔲 Planned |
 | **Phase 4** — Hardening | Auth/RBAC, SLA tiers, multi-tenant dashboard | 🔲 Planned |
@@ -281,9 +322,12 @@ Interactive docs: **http://localhost:8000/docs** | Spec: [`docs/api-spec.yaml`](
 POST   /auth/login                           Authenticate → JWT
 POST   /datasets                             Upload + schema-validate CSV
 POST   /experiments/train                    Kick off multi-model training (async)
+GET    /experiments/{id}/status              Poll training progress (per model, with errors)
 GET    /experiments/{id}/compare             Side-by-side metrics comparison
-POST   /models/{id}/deploy                   Promote to production
-POST   /models/{id}/predict                  Inference (p95 < 300ms)
+GET    /models/registered                    Model lineages + their production versions
+POST   /models/{id}/deploy                   Promote to production (per lineage)
+POST   /models/{id}/predict                  Inference (p95 < 300ms) — logs S1/S2/S3
+POST   /predictions/{id}/feedback            Attach ground truth to a prediction
 GET    /observability/{id}/drift         ⭐  Stage-wise drift status
 GET    /observability/{id}/attribution   ⭐  Root-cause attribution report
 POST   /retrain/{id}/trigger                 Request retraining

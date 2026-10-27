@@ -1,0 +1,6 @@
+# Host node_modules contain platform-specific binaries (e.g. Windows builds of
+# rollup/oxlint) that break inside the Linux container — always npm ci in the image.
+node_modules/
+dist/
+.vite/
+*.log

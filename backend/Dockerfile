@@ -25,15 +25,21 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application source
 COPY . .
 
+# Commit SHA baked into the image — recorded on every experiment run (reproducibility).
+# Declared after the dependency layers so a new commit doesn't invalidate the pip cache.
+ARG GIT_COMMIT=""
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 # ─── API target ───────────────────────────────────────────────────────────────
 FROM base AS api
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Apply migrations (+ seed demo users in local env), then serve
+CMD ["sh", "-c", "python -m app.bootstrap && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
 
 # ─── Worker target ────────────────────────────────────────────────────────────
 FROM base AS worker
