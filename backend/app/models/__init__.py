@@ -13,7 +13,7 @@ CI runs `alembic check` to catch drift between the two.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import ARRAY, Column, DateTime
+from sqlalchemy import ARRAY, Boolean, Column, DateTime
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -143,6 +143,7 @@ class ExperimentRun(Base):
     metrics = Column(JSONB, nullable=True)  # accuracy, F1, latency, etc.
     artifact_s3_path = Column(String(512), nullable=True)
     preprocessing_config = Column(JSONB, nullable=True)  # versioned preprocessing steps
+    baseline_s3_path = Column(String(512), nullable=True)  # per-stage drift reference sample
     git_commit = Column(String(40), nullable=True)
     status = Column(RUN_STATUS, default="queued")
     error = Column(Text, nullable=True)
@@ -223,19 +224,35 @@ class Prediction(Base):
 
 
 class DriftEvent(Base):
+    """
+    One row per stage per drift check (FR9) — written on every check, drifted or
+    not, so the dashboard can plot each stage's score over time.
+    """
+
     __tablename__ = "drift_events"
+    __table_args__ = (
+        Index("ix_drift_events_model_ts", "model_version_id", "detected_at"),
+        Index("ix_drift_events_check", "check_id"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     model_version_id = Column(UUID(as_uuid=False), ForeignKey("model_versions.id"), nullable=False)
+    check_id = Column(UUID(as_uuid=False), nullable=True)  # groups the three stage rows of one check
     stage = Column(
         SAEnum("S1_ingestion", "S2_preprocessing", "S3_output", name="drift_stage"),
         nullable=False,
     )
     drift_score = Column(Float, nullable=False)  # 0.0 – 1.0 normalized
-    detector_type = Column(String(50), nullable=True)  # ks_test | adwin
-    feature_name = Column(String(100), nullable=True)  # which feature drifted
+    p_value = Column(Float, nullable=True)
+    is_drifted = Column(Boolean, nullable=True)
+    detector_type = Column(String(50), nullable=True)  # ks_test | chi2 | adwin …
+    feature_name = Column(String(100), nullable=True)  # most-drifted feature
     threshold_used = Column(Float, nullable=True)
+    n_samples = Column(Integer, nullable=True)
+    window_start = Column(DateTime(timezone=True), nullable=True)
+    window_end = Column(DateTime(timezone=True), nullable=True)
     onset_timestamp = Column(DateTime(timezone=True), nullable=True)
+    details = Column(JSONB, nullable=True)  # per-feature tests, divergence, error drift
     detected_at = Column(DateTime(timezone=True), default=_now)
 
     model_version = relationship("ModelVersion", back_populates="drift_events")
@@ -246,12 +263,19 @@ class DriftEvent(Base):
 
 class AttributionReport(Base):
     __tablename__ = "attribution_reports"
+    __table_args__ = (Index("ix_attribution_reports_model_ts", "model_version_id", "generated_at"),)
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    model_version_id = Column(UUID(as_uuid=False), ForeignKey("model_versions.id"), nullable=True)
+    check_id = Column(UUID(as_uuid=False), nullable=True)
     drift_event_ids = Column(ARRAY(Text), nullable=False)
-    ranked_stages = Column(JSONB, nullable=False)  # [{stage, score, confidence}, ...]
+    ranked_stages = Column(JSONB, nullable=False)  # [{stage, score, confidence, …}, ...]
     root_cause_stage = Column(String(50), nullable=True)
     confidence = Column(Float, nullable=True)
+    explanation = Column(Text, nullable=True)
+    window_start = Column(DateTime(timezone=True), nullable=True)
+    window_end = Column(DateTime(timezone=True), nullable=True)
+    alert_sent_at = Column(DateTime(timezone=True), nullable=True)
     generated_at = Column(DateTime(timezone=True), default=_now)
 
 

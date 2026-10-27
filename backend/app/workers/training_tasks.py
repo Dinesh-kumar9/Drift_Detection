@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import settings
 from app.models import Dataset, ExperimentGroup, ExperimentRun, ModelVersion, RegisteredModel
 from app.services import preprocessing_service, registry_service, storage_service, training_service
+from app.services.drift.baselines import build_baseline
 from app.services.model_bundle import ModelBundle
 from app.workers.celery_app import celery_app
 from app.workers.db import task_session_factory
@@ -118,16 +119,21 @@ async def _train_and_register(db: AsyncSession, group: ExperimentGroup) -> dict:
     await asyncio.to_thread(preprocessing_service.save_preprocessed, X, y, config, dataset.id, group.id)
 
     # ── Train ────────────────────────────────────────────────────────────────
+    test_size = group.test_size or 0.2
+    random_state = group.random_state if group.random_state is not None else 42
     results = await asyncio.to_thread(
         training_service.train_all_models,
         X,
         y,
         task_type,
         [r.model_type for r in runs],
-        group.test_size or 0.2,
-        group.random_state if group.random_state is not None else 42,
+        test_size,
+        random_state,
     )
     by_name = {r["model_name"]: r for r in results}
+    # Same split the trainer used → held-out rows for the S3 drift baseline
+    _, test_idx = training_service.split_indices(y, task_type, test_size, random_state)
+    clean_df = df.dropna(subset=[group.target_column]).reset_index(drop=True)
 
     # ── Bundle, upload, register ────────────────────────────────────────────
     version = await registry_service.next_version_number(db, registered.id) if registered else 1
@@ -163,11 +169,23 @@ async def _train_and_register(db: AsyncSession, group: ExperimentGroup) -> dict:
             "application/octet-stream",
         )
 
+        baseline = await asyncio.to_thread(
+            build_baseline, bundle, clean_df, test_idx, settings.DRIFT_BASELINE_ROWS, random_state
+        )
+        baseline_path = await asyncio.to_thread(
+            storage_service.upload_bytes,
+            settings.S3_BUCKET_MODELS,
+            f"models/{dataset.id}/{group.id}/{run.id}/drift_baseline.json",
+            baseline.to_bytes(),
+            "application/json",
+        )
+
         run.status = "completed"
         run.error = None
         run.params = res["params"]
         run.metrics = {**res["metrics"], "model_size_kb": round(len(data) / 1024, 1)}
         run.artifact_s3_path = artifact_path
+        run.baseline_s3_path = baseline_path
         db.add(
             ModelVersion(
                 run_id=run.id,

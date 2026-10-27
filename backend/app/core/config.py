@@ -52,12 +52,24 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
 
     # ─── Drift Detection ──────────────────────────────────────────────────────
-    DRIFT_KS_P_VALUE_THRESHOLD: float = 0.05  # KS test significance level
+    DRIFT_KS_P_VALUE_THRESHOLD: float = 0.05  # family-wise significance per stage (Bonferroni-corrected)
+    DRIFT_MIN_EFFECT: float = 0.1  # minimum effect size (KS D / total-variation distance) to call drift
     DRIFT_ADWIN_DELTA: float = 0.002  # ADWIN sensitivity
-    DRIFT_CHECK_INTERVAL_SECONDS: int = 300  # Celery Beat default (5 min)
+    DRIFT_CHECK_INTERVAL_SECONDS: int = 60  # Celery Beat dispatcher tick; per-model cadence comes from SLA tier
+    DRIFT_WINDOW_MINUTES: int = 60  # how much recent traffic each check examines
+    DRIFT_MIN_SAMPLES: int = 50  # skip the check below this many predictions in the window
+    DRIFT_MAX_SAMPLES: int = 5000  # most recent predictions examined per check
+    DRIFT_ONSET_BUCKETS: int = 6  # window is split into this many buckets to locate drift onset
+    DRIFT_BASELINE_ROWS: int = 2000  # reference sample size stored per model at training time
+    # SLA tier → seconds between checks (FR16)
+    DRIFT_INTERVAL_CRITICAL: int = 60
+    DRIFT_INTERVAL_STANDARD: int = 300
+    DRIFT_INTERVAL_LOW: int = 1800
+    ENABLE_FAULT_INJECTION: bool = True  # /observability/{id}/simulate — disable outside demo/staging
 
     # ─── Alerting ─────────────────────────────────────────────────────────────
     SLACK_WEBHOOK_URL: Optional[str] = None  # Set to enable Slack alerts
+    ALERT_COOLDOWN_MINUTES: int = 30  # suppress repeat alerts for the same model + root cause
     ALERT_EMAIL_FROM: Optional[str] = None
     ALERT_EMAIL_TO: Optional[str] = None
 

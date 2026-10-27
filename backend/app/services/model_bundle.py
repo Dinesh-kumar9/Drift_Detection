@@ -79,15 +79,27 @@ class ModelBundle:
         raw = pd.DataFrame.from_records(records, columns=self.input_columns)
         return transform_features(self.preprocessor, raw, self.numeric_cols, self.cat_cols)
 
-    def predict(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def predict(
+        self,
+        records: list[dict[str, Any]],
+        feature_offsets: list[dict[str, float] | None] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Returns one dict per record:
           prediction     decoded label (classification) or float (regression)
           confidence     max class probability (classifiers with predict_proba)
           probabilities  {label: p} (classifiers with predict_proba)
           features       S2 feature values, for drift monitoring
+
+        `feature_offsets` (fault injection only) adds per-row offsets to the transformed
+        features — simulating a broken preprocessing deploy. Normal serving never passes it.
         """
         features = self.transform(records)
+        if feature_offsets:
+            for i, offsets in enumerate(feature_offsets):
+                for name, delta in (offsets or {}).items():
+                    if name in features.columns:
+                        features.iat[i, features.columns.get_loc(name)] += delta
         X = features.to_numpy()
         raw_pred = self.model.predict(X)
 

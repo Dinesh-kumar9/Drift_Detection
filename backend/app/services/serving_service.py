@@ -107,3 +107,35 @@ async def run_inference(
         "latency_ms": latency_ms,
         **json_safe(output),
     }
+
+
+async def log_traffic(db: AsyncSession, model_version_id: str, rows: list) -> int:
+    """
+    Run synthetic traffic (drift.fault_injection.TrafficRow) through the real
+    bundle and log it like live predictions, with its own timestamps and ground
+    truth. Used by fault injection; normal serving goes through run_inference.
+    """
+    bundle = await load_bundle(db, model_version_id)
+    offsets = [r.feature_offsets for r in rows]
+    outputs = await asyncio.to_thread(bundle.predict, [r.record for r in rows], offsets if any(offsets) else None)
+    for row, out in zip(rows, outputs):
+        db.add(
+            Prediction(
+                model_version_id=model_version_id,
+                input_snapshot=json_safe(row.record),
+                features_snapshot=out["features"],
+                output=json_safe(
+                    {
+                        "prediction": out["prediction"],
+                        "confidence": out["confidence"],
+                        "probabilities": out["probabilities"],
+                    }
+                ),
+                latency_ms=None,
+                actual=json_safe(row.actual) if row.actual is not None else None,
+                feedback_at=row.timestamp if row.actual is not None else None,
+                predicted_at=row.timestamp,
+            )
+        )
+    await db.flush()
+    return len(rows)

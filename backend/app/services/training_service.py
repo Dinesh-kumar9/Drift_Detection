@@ -137,18 +137,24 @@ def _train_single(
 # ─── Parallel training orchestrator ──────────────────────────────────────────
 
 
-def _split(X: np.ndarray, y: np.ndarray, task_type: str, test_size: float, random_state: int):
-    """Stratify classification splits when every class has ≥ 2 rows; otherwise fall back to a plain split."""
+def split_indices(y, task_type: str, test_size: float, random_state: int) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Deterministic train/test row positions. Stratifies classification splits when every
+    class has ≥ 2 rows; otherwise falls back to a plain split. The training worker calls
+    this again to recover the held-out rows for the S3 drift baseline.
+    """
+    y = np.asarray(y)
+    idx = np.arange(len(y))
     stratify = None
     if task_type == "classification":
         _, counts = np.unique(y, return_counts=True)
         if counts.min() >= 2:
             stratify = y
     try:
-        return train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=stratify)
+        return train_test_split(idx, test_size=test_size, random_state=random_state, stratify=stratify)
     except ValueError:
         # e.g. test split smaller than the number of classes
-        return train_test_split(X, y, test_size=test_size, random_state=random_state)
+        return train_test_split(idx, test_size=test_size, random_state=random_state)
 
 
 def train_all_models(
@@ -172,9 +178,9 @@ def train_all_models(
     if unknown:
         raise ValueError(f"Unknown {task_type} model(s): {unknown}")
 
-    X_train, X_test, y_train, y_test = _split(
-        np.asarray(X, dtype=float), np.asarray(y), task_type, test_size, random_state
-    )
+    X_arr, y_arr = np.asarray(X, dtype=float), np.asarray(y)
+    train_idx, test_idx = split_indices(y_arr, task_type, test_size, random_state)
+    X_train, X_test, y_train, y_test = X_arr[train_idx], X_arr[test_idx], y_arr[train_idx], y_arr[test_idx]
 
     results = []
     with ThreadPoolExecutor(max_workers=len(names)) as pool:
