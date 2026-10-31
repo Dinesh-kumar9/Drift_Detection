@@ -186,7 +186,9 @@ class ModelVersion(Base):
     registered_model = relationship("RegisteredModel", back_populates="versions")
     predictions = relationship("Prediction", back_populates="model_version")
     drift_events = relationship("DriftEvent", back_populates="model_version")
-    retrain_jobs = relationship("RetrainJob", back_populates="model_version")
+    retrain_jobs = relationship(
+        "RetrainJob", back_populates="model_version", foreign_keys="RetrainJob.model_version_id"
+    )
 
 
 # ─── Predictions ─────────────────────────────────────────────────────────────
@@ -283,23 +285,44 @@ class AttributionReport(Base):
 
 
 class RetrainJob(Base):
+    """
+    Lifecycle: pending (awaiting approval) → approved → running → completed (candidate
+    trained + evaluated) → promoted_at set once an admin promotes the candidate.
+    rejected = gate suppressed it or a human said no; failed = retraining errored.
+    """
+
     __tablename__ = "retrain_jobs"
+    __table_args__ = (
+        Index("ix_retrain_jobs_model_ts", "model_version_id", "created_at"),
+        Index("ix_retrain_jobs_status", "status"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     model_version_id = Column(UUID(as_uuid=False), ForeignKey("model_versions.id"), nullable=False)
-    trigger_reason = Column(JSONB, nullable=True)  # what caused retrain
+    trigger_type = Column(String(20), nullable=True)  # auto | manual
+    trigger_reason = Column(JSONB, nullable=True)  # root cause, error rates, data window
+    decision = Column(JSONB, nullable=True)  # cost-benefit gate evaluation
     cost_estimate = Column(Float, nullable=True)  # estimated $ compute cost
-    expected_gain = Column(Float, nullable=True)  # expected accuracy delta
+    expected_gain = Column(Float, nullable=True)  # expected error-rate reduction
+    attribution_report_id = Column(UUID(as_uuid=False), ForeignKey("attribution_reports.id"), nullable=True)
+    requested_by = Column(UUID(as_uuid=False), nullable=True)
     approved_by = Column(UUID(as_uuid=False), nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(
         SAEnum("pending", "approved", "rejected", "running", "completed", "failed", name="retrain_status"),
         default="pending",
     )
     rejection_reason = Column(Text, nullable=True)
+    experiment_group_id = Column(UUID(as_uuid=False), ForeignKey("experiment_groups.id"), nullable=True)
+    candidate_model_version_id = Column(UUID(as_uuid=False), ForeignKey("model_versions.id"), nullable=True)
+    evaluation = Column(JSONB, nullable=True)  # candidate vs production on held-out recent data
+    error = Column(Text, nullable=True)
+    promoted_by = Column(UUID(as_uuid=False), nullable=True)
+    promoted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)
     updated_at = Column(DateTime(timezone=True), onupdate=_now)
 
-    model_version = relationship("ModelVersion", back_populates="retrain_jobs")
+    model_version = relationship("ModelVersion", back_populates="retrain_jobs", foreign_keys=[model_version_id])
 
 
 # ─── Audit Logs ──────────────────────────────────────────────────────────────

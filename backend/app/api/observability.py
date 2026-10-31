@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.models import AttributionReport, AuditLog, DriftEvent, ExperimentRun, ModelVersion, Prediction, RegisteredModel
 from app.schemas.observability import (
     AttributionHistoryResponse,
@@ -204,7 +204,7 @@ async def check_now(
     model_version_id: str,
     window_minutes: int | None = Query(None, ge=1, le=24 * 60),
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("engineer", "admin")),
 ):
     """Run a drift check immediately instead of waiting for the scheduler."""
     await _get_version(db, model_version_id)
@@ -216,7 +216,7 @@ async def simulate(
     model_version_id: str,
     payload: SimulateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("engineer", "admin")),
 ):
     """
     Fault injection (demo / testing): log synthetic traffic with a fault at a known

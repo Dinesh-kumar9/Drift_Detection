@@ -67,6 +67,23 @@ class Settings(BaseSettings):
     DRIFT_INTERVAL_LOW: int = 1800
     ENABLE_FAULT_INJECTION: bool = True  # /observability/{id}/simulate — disable outside demo/staging
 
+    # ─── Retraining (FR12–FR14) ───────────────────────────────────────────────
+    AUTO_RETRAIN_ENABLED: bool = True  # drift checks may open retrain requests (still need human approval)
+    RETRAIN_MIN_LABELLED: int = 100  # ground-truth rows needed since drift onset
+    RETRAIN_MIN_ERROR_INCREASE: float = 0.05  # classification: absolute error-rate rise to justify retraining
+    RETRAIN_MIN_REL_ERROR_INCREASE: float = 0.2  # regression: relative MAE rise
+    RETRAIN_HOLDOUT_FRACTION: float = 0.2  # newest labelled rows kept back to compare candidate vs production
+    RETRAIN_SUPPRESS_MINUTES: int = 30  # don't re-evaluate an auto-rejected retrain for the same cause sooner
+    # Cost-benefit gate — illustrative business parameters, tune per organisation
+    RETRAIN_COST_PER_VCPU_HOUR: float = 0.05  # $ (≈ Fargate on-demand)
+    RETRAIN_VCPUS: int = 2
+    RETRAIN_FIXED_COST: float = 0.02  # $ per job (storage, scheduling)
+    RETRAIN_RECOVERY_FACTOR: float = 0.5  # share of the lost accuracy a retrain is expected to win back
+    RETRAIN_VALUE_MARGIN: float = 3.0  # expected value must exceed cost × margin
+    RETRAIN_VALUE_PER_POINT_CRITICAL: float = 25.0  # $ per accuracy point recovered, by SLA tier
+    RETRAIN_VALUE_PER_POINT_STANDARD: float = 10.0
+    RETRAIN_VALUE_PER_POINT_LOW: float = 2.0
+
     # ─── Alerting ─────────────────────────────────────────────────────────────
     SLACK_WEBHOOK_URL: Optional[str] = None  # Set to enable Slack alerts
     ALERT_COOLDOWN_MINUTES: int = 30  # suppress repeat alerts for the same model + root cause

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.models import AuditLog, Dataset, ExperimentRun, ModelVersion, RegisteredModel
 from app.schemas.model import (
     DeployRequest,
@@ -145,7 +145,7 @@ async def deploy_model(
     model_version_id: str,
     payload: DeployRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("engineer", "admin")),
 ):
     """Promote a model version to production. Archives the lineage's current production version."""
     mv, run, rm = await _get_version_or_404(db, model_version_id)
@@ -183,7 +183,7 @@ async def predict(
     model_version_id: str,
     payload: PredictRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("engineer", "admin")),
 ):
     """
     Run inference on the given model version.

@@ -67,5 +67,13 @@ class TestDemoUsers:
         from app.bootstrap import DEMO_USERS
         from app.schemas.auth import UserCreate
 
-        for email, password, role in DEMO_USERS:
-            UserCreate(email=email, password=password, role=role)
+        for email, password, _role in DEMO_USERS:
+            UserCreate(email=email, password=password, role="engineer")  # the email domain is what's under test
+
+    def test_admin_cannot_self_register(self):
+        from pydantic import ValidationError
+
+        from app.schemas.auth import UserCreate
+
+        with pytest.raises(ValidationError):
+            UserCreate(email="x@example.com", password="password123", role="admin")

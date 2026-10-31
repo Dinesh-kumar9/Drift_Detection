@@ -90,7 +90,6 @@ export default function Login() {
               <select id="role" className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
                 <option value="viewer">Viewer — read only</option>
                 <option value="engineer">Engineer — train & deploy</option>
-                <option value="admin">Admin — approvals</option>
               </select>
             </div>
           )}
@@ -120,7 +119,7 @@ export default function Login() {
                 className="w-full flex justify-between text-xs font-mono text-slate-400 hover:text-slate-100 px-2 py-1 rounded hover:bg-surface-border/40"
               >
                 <span>{a.email}</span>
-                <span className="text-slate-600">{a.role}</span>
+                <span className="text-slate-500">{a.password} · {a.role}</span>
               </button>
             ))}
           </div>

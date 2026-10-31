@@ -113,3 +113,37 @@ def run_training(dispatched, session_factory):
         return results
 
     return _run
+
+
+@pytest.fixture
+def retrain_dispatched(monkeypatch) -> list[dict]:
+    """Records retrain-job dispatches (approve) instead of sending them to Redis."""
+    from app.workers.retrain_tasks import run_retrain_job
+
+    calls: list[dict] = []
+    monkeypatch.setattr(run_retrain_job, "apply_async", lambda kwargs=None, **_: calls.append(kwargs or {}))
+    return calls
+
+
+@pytest.fixture
+async def admin_headers(client, session_factory) -> dict[str, str]:
+    """Admins can't self-register — create one directly, like the bootstrap seed does."""
+    import uuid
+
+    from app.core.security import create_access_token, hash_password
+    from app.models import User
+
+    user_id = str(uuid.uuid4())
+    async with session_factory() as db:
+        db.add(User(id=user_id, email="admin@test.io", hashed_password=hash_password("password123"), role="admin"))
+        await db.commit()
+    return {"Authorization": f"Bearer {create_access_token(user_id, role='admin', email='admin@test.io')}"}
+
+
+@pytest.fixture
+async def viewer_headers(client) -> dict[str, str]:
+    res = await client.post(
+        "/auth/register", json={"email": "viewer@test.io", "password": "password123", "role": "viewer"}
+    )
+    assert res.status_code == 201, res.text
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
