@@ -205,7 +205,7 @@ async def run_drift_check(
         db.add(event)
         events.append(event)
 
-    report_id, alert_channel = None, None
+    report_id, alert_channel, retrain = None, None, None
     if attribution.drift_detected:
         report = AttributionReport(
             id=str(uuid.uuid4()),
@@ -223,6 +223,13 @@ async def run_drift_check(
         db.add(report)
         report_id = report.id
         alert_channel = await _maybe_alert(db, mv, report, attribution, now)
+        await db.flush()
+        # FR12: open a retrain request if the cost-benefit gate agrees (an admin still has to approve it)
+        from app.services import retrain_service  # imported here: retrain_service depends on drift modules
+
+        retrain = await retrain_service.consider_auto_retrain(
+            db, model_version_id, attribution.root_cause, onsets.get(attribution.root_cause), report.id
+        )
     await db.flush()
 
     logger.info(
@@ -255,6 +262,7 @@ async def run_drift_check(
         },
         "report_id": report_id,
         "alert": alert_channel,
+        "retrain": retrain,
     }
 
 

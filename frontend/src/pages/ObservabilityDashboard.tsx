@@ -361,6 +361,22 @@ export default function ObservabilityDashboard() {
               {lastOutcome.message}
             </div>
           )}
+          {lastOutcome?.retrain && (
+            <div className={clsx(
+              'px-4 py-3 rounded-lg border text-sm flex items-center justify-between gap-4',
+              lastOutcome.retrain.status === 'pending'
+                ? 'bg-drift-warning/10 border-drift-warning/30 text-drift-warning'
+                : 'bg-surface-card border-surface-border text-slate-300',
+            )}>
+              <span>
+                {lastOutcome.retrain.status === 'pending'
+                  ? <><AlertTriangle size={14} className="inline mr-1" />Retrain request opened — awaiting admin approval. </>
+                  : <><CheckCircle size={14} className="inline mr-1" />Retraining not proposed: </>}
+                {lastOutcome.retrain.reason}
+              </span>
+              <a href="/retrain" className="text-xs underline whitespace-nowrap">Retrain console →</a>
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-4">
             {STAGES.map((s) => <StageCard key={s} stage={s} status={stageByName[s]} threshold={drift?.threshold ?? 0.1} />)}

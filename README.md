@@ -125,10 +125,12 @@ On start the API container applies all Alembic migrations and (in `ENVIRONMENT=l
 
 | Service | URL | Credentials |
 |---|---|---|
-| **Frontend** | http://localhost:3000 | `engineer@example.com` / `engineer1234` (also `admin@…`/`admin1234`, `viewer@…`/`viewer1234`) |
+| **Frontend** | http://localhost:3000 | `engineer@example.com` / `engineer1234` · `admin@example.com` / `admin1234` (approves retraining) · `viewer@example.com` / `viewer1234` (read-only) |
 | **Backend Swagger** | http://localhost:8000/docs | same accounts via `POST /auth/login` |
 | **MinIO Console** | http://localhost:9001 | minioadmin / minioadmin |
 | **Flower** (task monitor) | http://localhost:5555 | — |
+
+**Full walkthrough (≈10 min, every requirement):** [docs/DEMO.md](docs/DEMO.md)
 
 **Try the observability engine:** open *Observability*, pick a fault (e.g. "S2 · Preprocessing bug") and click
 *Inject & check* — the attribution panel names the stage you broke.
@@ -311,8 +313,8 @@ flowchart LR
 | **Phase 1** — Core Lifecycle | Upload → Train → Compare → Deploy → Predict | ✅ **Complete** (hardened in 1.5) |
 | **Phase 1.5** — Make it real | Model bundles, registry lineages, 3-stage prediction logging, auth UI, integration tests | ✅ **Complete** |
 | **Phase 2** — Observability ⭐ | Stage drift detection + root-cause attribution | ✅ **Complete** |
-| **Phase 3** — Retraining Loop | Cost-gated, human-approved closed-loop retrain | 🔲 Planned |
-| **Phase 4** — Hardening | Auth/RBAC, SLA tiers, multi-tenant dashboard | 🔲 Planned |
+| **Phase 3** — Retraining Loop | Cost-gated, human-approved closed-loop retrain | ✅ **Complete** |
+| **Phase 4** — Hardening | Auth/RBAC, SLA tiers, multi-tenant dashboard | 🟡 Partial — RBAC (viewer/engineer/admin), SLA-tier check cadence and multi-model health view done; rate limiting, load tests, AWS deploy pending |
 
 > ⚠️ **Phase 2 is non-negotiable** — it is the core differentiator. Without it, this is just another MLOps CRUD app.
 
@@ -337,8 +339,11 @@ GET    /observability/{id}/drift         ⭐  Stage-wise drift status + score tr
 GET    /observability/{id}/attribution   ⭐  Root-cause attribution reports
 POST   /observability/{id}/check         ⭐  Run a drift check now
 POST   /observability/{id}/simulate      ⭐  Inject a fault at a stage (demo/testing)
-POST   /retrain/{id}/trigger                 Request retraining
-POST   /retrain/{job_id}/approve             Human approval gate
+POST   /retrain/{id}/trigger                 Request retraining (cost-benefit gate)
+GET    /retrain/jobs                         Retrain requests + gate decisions
+POST   /retrain/jobs/{id}/approve            Human gate 1: approve compute (admin)
+POST   /retrain/jobs/{id}/promote            Human gate 2: promote candidate (admin)
+POST   /retrain/jobs/{id}/reject             Reject request / decline candidate (admin)
 GET    /audit-logs                           Filterable audit trail
 ```
 

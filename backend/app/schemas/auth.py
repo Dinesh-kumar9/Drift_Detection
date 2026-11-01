@@ -16,8 +16,10 @@ class UserCreate(BaseModel):
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: str) -> str:
-        if v not in ("viewer", "engineer", "admin"):
-            raise ValueError("role must be viewer, engineer, or admin")
+        # Self-registration can't grant admin (admins approve retraining + promotions);
+        # admin accounts come from the bootstrap seed.
+        if v not in ("viewer", "engineer"):
+            raise ValueError("role must be viewer or engineer")
         return v
 
 

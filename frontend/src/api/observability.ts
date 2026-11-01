@@ -96,6 +96,7 @@ export interface CheckOutcome {
   n_samples?: number
   message?: string
   alert?: string | null
+  retrain?: { job_id: string; status: 'pending' | 'rejected'; reason: string } | null
 }
 
 export interface SimulateRequest {
