@@ -1,0 +1,2 @@
+# Load-test tooling only; kept out of requirements-dev.txt so CI stays lean.
+locust==2.47.0

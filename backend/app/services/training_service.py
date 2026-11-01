@@ -30,6 +30,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier, XGBRegressor
 
+from app.core.config import settings
 from app.core.utils import json_safe
 
 logger = logging.getLogger(__name__)
@@ -37,16 +38,21 @@ logger = logging.getLogger(__name__)
 
 # ─── Model catalogue ──────────────────────────────────────────────────────────
 # Unfitted templates — always `clone()` before fitting so concurrent jobs never share state.
+# Thread counts are capped explicitly: see TRAINING_THREADS_PER_MODEL in config.
+
+_THREADS = settings.TRAINING_THREADS_PER_MODEL
 
 CLASSIFICATION_MODELS = {
-    "RandomForestClassifier": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1),
-    "XGBClassifier": XGBClassifier(n_estimators=100, random_state=42, eval_metric="logloss", verbosity=0),
+    "RandomForestClassifier": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=_THREADS),
+    "XGBClassifier": XGBClassifier(
+        n_estimators=100, random_state=42, eval_metric="logloss", verbosity=0, n_jobs=_THREADS
+    ),
     "LogisticRegression": LogisticRegression(max_iter=1000, random_state=42),
 }
 
 REGRESSION_MODELS = {
-    "RandomForestRegressor": RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1),
-    "XGBRegressor": XGBRegressor(n_estimators=100, random_state=42, verbosity=0),
+    "RandomForestRegressor": RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=_THREADS),
+    "XGBRegressor": XGBRegressor(n_estimators=100, random_state=42, verbosity=0, n_jobs=_THREADS),
     "Ridge": Ridge(random_state=42),
 }
 

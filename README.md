@@ -148,7 +148,7 @@ cd backend && python scripts/demo_lifecycle.py
 
 ```bash
 cd backend
-pip install -r requirements.txt
+pip install -r requirements-dev.txt                  # runtime deps + pytest, moto, black, flake8, isort
 pytest tests/unit                                    # pure-Python, no services needed
 
 # integration tests need a throwaway Postgres (tables are truncated!)
@@ -156,6 +156,24 @@ docker run -d --name mlops_test_pg -e POSTGRES_USER=mlops -e POSTGRES_PASSWORD=m
   -e POSTGRES_DB=mlops_test -p 5433:5432 postgres:16-alpine
 TEST_DATABASE_URL=postgresql+asyncpg://mlops:mlops@localhost:5433/mlops_test pytest tests/
 ```
+
+### Load test (p95 < 300 ms NFR)
+
+```bash
+docker compose --profile perf up -d api_perf          # production-mode API (4 workers) on :8001
+cd backend && pip install -r tests/load/requirements.txt
+locust -f tests/load/locustfile.py --host http://127.0.0.1:8001 --headless --users 20 --spawn-rate 5 --run-time 2m
+```
+
+Result: **p95 120 ms at 55 req/s** with 20 concurrent users, and 250 ms at 82 req/s with 35 users,
+over the full path (auth, rate limiting, preprocessing, model, prediction log). See [docs/LOAD_TEST.md](docs/LOAD_TEST.md).
+
+### Rate limits
+
+Every endpoint is rate limited per minute, with counters in Redis so all API processes share them:
+sign-in **10 per IP**, predictions **6000 per user**, jobs (upload, train, drift check, simulate, retrain) **30 per user**,
+everything else **600 per user**. Over the limit, the API returns `429` with `Retry-After`.
+Responses carry `X-RateLimit-*` headers. Limits are set with `RATE_LIMIT_*` in `.env`.
 
 ---
 
@@ -314,7 +332,7 @@ flowchart LR
 | **Phase 1.5** — Make it real | Model bundles, registry lineages, 3-stage prediction logging, auth UI, integration tests | ✅ **Complete** |
 | **Phase 2** — Observability ⭐ | Stage drift detection + root-cause attribution | ✅ **Complete** |
 | **Phase 3** — Retraining Loop | Cost-gated, human-approved closed-loop retrain | ✅ **Complete** |
-| **Phase 4** — Hardening | Auth/RBAC, SLA tiers, multi-tenant dashboard | 🟡 Partial — RBAC (viewer/engineer/admin), SLA-tier check cadence and multi-model health view done; rate limiting, load tests, AWS deploy pending |
+| **Phase 4** — Hardening | Auth/RBAC, SLA tiers, multi-tenant dashboard | 🟡 Mostly done — RBAC (viewer/engineer/admin), SLA-tier check cadence, multi-model health view, rate limiting on every endpoint, load test (p95 120 ms), slim images (2.79 GB → under 1 GB); AWS deploy pending |
 
 > ⚠️ **Phase 2 is non-negotiable** — it is the core differentiator. Without it, this is just another MLOps CRUD app.
 

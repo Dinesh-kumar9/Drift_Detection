@@ -97,8 +97,9 @@ services:
       target: api
     container_name: mlops_api
     restart: unless-stopped
-    # Migrations + demo users, then uvicorn with hot reload (source is bind-mounted)
-    command: sh -c "python -m app.bootstrap && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    # Migrations + demo users, then uvicorn with hot reload (source is bind-mounted).
+    # Watch only app/: scanning the whole mount (incl. a local .venv) burned ~12% CPU at idle.
+    command: sh -c "python -m app.bootstrap && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app"
     env_file:
       - ./backend/.env.example
     environment:
@@ -175,6 +176,32 @@ services:
       - mlops_net
     volumes:
       - ./backend:/app
+
+  # ── Production-mode API (load testing) ────────────────────────────────────
+  # The image's own command: several uvicorn workers, no hot reload, no bind mount.
+  #   docker compose --profile perf up -d api_perf   →  http://localhost:8001
+  api_perf:
+    build:
+      context: ./backend
+      target: api
+    container_name: mlops_api_perf
+    profiles: ["perf"]
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mlops:mlops@postgres:5432/mlops_db
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      S3_ENDPOINT_URL: http://minio:9000
+      API_WORKERS: 4
+    ports:
+      - "8001:8000"
+    depends_on:
+      backend:
+        condition: service_healthy   # migrations already applied
+    networks:
+      - mlops_net
 
   # ── Flower (Celery monitoring UI) ─────────────────────────────────────────
   flower:

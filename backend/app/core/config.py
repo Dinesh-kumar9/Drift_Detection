@@ -30,8 +30,24 @@ class Settings(BaseSettings):
     # ─── Serving ──────────────────────────────────────────────────────────────
     MODEL_CACHE_SIZE: int = 32  # model bundles kept in memory per API process
 
+    # ─── Rate limiting (per minute; see app/core/rate_limit.py) ───────────────
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_STORAGE: str = "redis"  # redis (shared by all API processes) | memory (single process, tests)
+    RATE_LIMIT_TRUST_FORWARDED_FOR: bool = False  # set true only behind a proxy that overwrites X-Forwarded-For
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 10  # login/register, per client IP
+    RATE_LIMIT_PREDICT_PER_MINUTE: int = 6000  # per user (100 req/s)
+    RATE_LIMIT_JOBS_PER_MINUTE: int = 30  # uploads, training, drift checks, retraining, per user
+    RATE_LIMIT_DEFAULT_PER_MINUTE: int = 600  # every other endpoint, per user
+
+    # ─── Training ─────────────────────────────────────────────────────────────
+    # CPU threads per model. The three candidates train side by side, and XGBoost
+    # left on "all cores" was ~150x slower in Docker (50s vs 0.34s at 4 threads)
+    # because its OpenMP threads contend with each other.
+    TRAINING_THREADS_PER_MODEL: int = 4
+
     # ─── Database ─────────────────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://mlops:mlops@localhost:5432/mlops_db"
+    SQL_ECHO: bool = False  # log every SQL statement — separate from DEBUG because it floods the logs
 
     # ─── Redis / Celery ───────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -54,7 +70,6 @@ class Settings(BaseSettings):
     # ─── Drift Detection ──────────────────────────────────────────────────────
     DRIFT_KS_P_VALUE_THRESHOLD: float = 0.05  # family-wise significance per stage (Bonferroni-corrected)
     DRIFT_MIN_EFFECT: float = 0.1  # minimum effect size (KS D / total-variation distance) to call drift
-    DRIFT_ADWIN_DELTA: float = 0.002  # ADWIN sensitivity
     DRIFT_CHECK_INTERVAL_SECONDS: int = 60  # Celery Beat dispatcher tick; per-model cadence comes from SLA tier
     DRIFT_WINDOW_MINUTES: int = 60  # how much recent traffic each check examines
     DRIFT_MIN_SAMPLES: int = 50  # skip the check below this many predictions in the window
