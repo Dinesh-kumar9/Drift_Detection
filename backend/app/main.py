@@ -15,6 +15,7 @@ from sqlalchemy.exc import DBAPIError
 
 from app.api import audit, auth, datasets, experiments, models, observability, predictions, retrain
 from app.core.config import settings
+from app.core.rate_limit import RateLimitMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,17 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    # ─── CORS ─────────────────────────────────────────────────────────────────
+    # ─── Middleware ───────────────────────────────────────────────────────────
+    # The last one added runs first. CORS must wrap the rate limiter, or browsers
+    # see a 429 as a CORS failure instead of a readable error.
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
     )
 
     # ─── Exception handlers ───────────────────────────────────────────────────

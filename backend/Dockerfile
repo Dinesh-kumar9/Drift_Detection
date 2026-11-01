@@ -11,14 +11,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system dependencies (for asyncpg, cryptography, scipy)
+# curl is only for the healthcheck. No compiler is installed: every dependency
+# ships a prebuilt wheel for Python 3.11 on Linux (build-essential added ~390 MB).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Runtime dependencies only (test and lint tools live in requirements-dev.txt)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -38,8 +37,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Apply migrations (+ seed demo users in local env), then serve
-CMD ["sh", "-c", "python -m app.bootstrap && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Apply migrations (+ seed demo users in local env), then serve with several
+# processes: inference is CPU-bound, so one process saturates at ~35 req/s.
+ENV API_WORKERS=4
+CMD ["sh", "-c", "python -m app.bootstrap && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${API_WORKERS}"]
 
 # ─── Worker target ────────────────────────────────────────────────────────────
 FROM base AS worker

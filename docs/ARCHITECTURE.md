@@ -56,7 +56,7 @@ flowchart TB
         TRAIN["🏋️ Training Service\n(Celery async jobs)"]
         REG["📦 Model Registry\n(staging/production/archived)"]
         SERVE["🚀 Serving/Inference\n(predict + log)"]
-        OBS["📡 Observability Service\n(KS + ADWIN monitors)"]
+        OBS["📡 Observability Service\n(KS / chi² / error-rate tests)"]
         RETRAIN["🔄 Retrain Orchestrator\n(cost-gate + approval)"]
     end
 
@@ -104,7 +104,7 @@ flowchart LR
 
         S1 -->|"scipy.stats.ks_2samp\n(batch KS test per feature)"| M1["Stage 1 Monitor\ndrift_score · onset_ts"]
         S2 -->|"scipy.stats.ks_2samp\n(batch KS test per feature)"| M2["Stage 2 Monitor\ndrift_score · onset_ts"]
-        S3 -->|"river.drift.ADWIN\n(streaming error rate)"| M3["Stage 3 Monitor\ndrift_score · onset_ts"]
+        S3 -->|"one-sided proportion test\n(error rate vs baseline)"| M3["Stage 3 Monitor\ndrift_score · onset_ts"]
     end
 
     subgraph Attribution["Attribution Engine"]
@@ -215,7 +215,7 @@ sequenceDiagram
         DRIFT->>DRIFT: KS test on preprocessed features
         DRIFT->>DB: Write drift_event (S2, score, onset_ts)
     and Stage 3 Monitor
-        DRIFT->>DRIFT: ADWIN on prediction error stream
+        DRIFT->>DRIFT: One-sided test: error rate vs training baseline
         DRIFT->>DB: Write drift_event (S3, score, onset_ts)
     end
 
@@ -533,7 +533,7 @@ docker-compose up --build
 | Task Queue | Celery + Redis | Non-blocking training jobs |
 | Scheduler | Celery Beat → Airflow (Phase 2+) | Start simple, DAG complexity when needed |
 | Drift (batch) | `scipy.stats.ks_2samp` | Non-parametric, works on any distribution |
-| Drift (stream) | `river.drift.ADWIN` | Adaptive windowing, ideal for error rate streams |
+| Drift (output) | One-sided proportion z-test | Error rate vs the training baseline on labelled traffic; simpler to explain than streaming ADWIN and Bonferroni-corrected together with the other tests |
 | Frontend | React 18 + Vite + TypeScript | Fast dev loop, type safety for API contracts |
 | UI | Tailwind CSS v3 | PRD-specified, rapid consistent styling |
 | Charts | Recharts | React-native, good for time-series |
